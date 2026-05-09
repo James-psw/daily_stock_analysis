@@ -182,6 +182,29 @@ class AnalysisApiContractTestCase(unittest.TestCase):
             override_region="cn,us",
         )
 
+    def test_market_review_runtime_initializes_analyzer_for_litellm_provider(self) -> None:
+        if analysis_endpoint_module is None:
+            self.skipTest("analysis endpoint helpers unavailable in this environment")
+
+        config = SimpleNamespace(
+            has_search_capability_enabled=lambda: False,
+            gemini_api_key=None,
+            openai_api_key=None,
+            litellm_model="anthropic/claude-sonnet-4-6",
+            llm_model_list=[],
+            anthropic_api_keys=["sk-ant-test-value"],
+        )
+
+        with patch("src.notification.NotificationService"), \
+             patch("src.analyzer.GeminiAnalyzer") as analyzer_cls:
+            analyzer_cls.return_value.is_available.return_value = True
+
+            _, analyzer, search_service = analysis_endpoint_module._build_market_review_runtime(config)
+
+        analyzer_cls.assert_called_once_with(config=config)
+        self.assertIs(analyzer, analyzer_cls.return_value)
+        self.assertIsNone(search_service)
+
     def test_get_analysis_status_completed_db_snapshot_preserves_zero_change_pct(self) -> None:
         if get_analysis_status is None:
             self.skipTest("analysis endpoint helpers unavailable in this environment")

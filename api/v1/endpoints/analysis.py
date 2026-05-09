@@ -195,6 +195,32 @@ def _compute_market_review_override_region(config: Config) -> Optional[str]:
         return None
 
 
+def _has_configured_llm_runtime(config: Config) -> bool:
+    if (getattr(config, "litellm_model", "") or "").strip():
+        return True
+    if getattr(config, "llm_model_list", None):
+        return True
+
+    for field in (
+        "gemini_api_key",
+        "gemini_api_keys",
+        "anthropic_api_key",
+        "anthropic_api_keys",
+        "deepseek_api_key",
+        "deepseek_api_keys",
+        "openai_api_key",
+        "openai_api_keys",
+    ):
+        value = getattr(config, field, None)
+        if isinstance(value, str):
+            if value.strip():
+                return True
+        elif value:
+            return True
+
+    return False
+
+
 def _build_market_review_runtime(config: Config) -> tuple[Any, Any, Any]:
     from src.analyzer import GeminiAnalyzer
     from src.notification import NotificationService
@@ -223,13 +249,13 @@ def _build_market_review_runtime(config: Config) -> tuple[Any, Any, Any]:
         )
 
     analyzer = None
-    if getattr(config, "gemini_api_key", None) or getattr(config, "openai_api_key", None):
+    if _has_configured_llm_runtime(config):
         analyzer = GeminiAnalyzer(config=config)
         if not analyzer.is_available():
-            logger.warning("AI 分析器初始化后不可用，请检查 API Key 配置")
+            logger.warning("AI 分析器初始化后不可用，请检查 LLM 配置")
             analyzer = None
     else:
-        logger.warning("未检测到 API Key (Gemini/OpenAI)，将仅使用模板生成报告")
+        logger.warning("未检测到 LLM 模型配置，将仅使用模板生成报告")
 
     return notifier, analyzer, search_service
 
