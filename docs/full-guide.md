@@ -945,6 +945,15 @@ PUSHOVER_API_TOKEN=your_api_token
 
 未配置可访问的 Web base URL 或拿不到历史报告记录时，系统不应生成误导性的完整报告链接；飞书云文档或图片快照创建失败时，会回退现有文本 / 分片推送路径。可通过 `python main.py --check-notify` 查看当前渠道的推荐投递形态和转图依赖诊断。
 
+### 兼容性与 issue 跟踪说明（通知投递迭代）
+
+- 本节改动为 `#1311` 的分阶段计划（P0-P7）治理片段之一，当前阶段默认以 `Refs #1311` 跟踪，避免单次 PR 关闭 umbrella issue。
+- 通知投递体验与诊断仅收口链路与展示语义，不涉及模型名、provider、Base URL、LLM 配置清理或持久化迁移语义；回退路径为恢复到历史配置行为。
+- 兼容性核验依据：
+  - 官方来源：<https://docs.litellm.ai/docs/providers/openai_compatible>、<https://platform.openai.com/docs/api-reference/chat/create>
+  - 运行时依赖窗口：`requirements.txt` 中 `litellm>=1.80.10,!=1.82.7,!=1.82.8,<2.0.0`
+  - 建议回归测试：`tests/test_notification_diagnostics.py`、`tests/test_feishu_doc.py`，以及 `python main.py --check-notify` 的投递形态输出。
+
 ---
 
 ## 数据源配置

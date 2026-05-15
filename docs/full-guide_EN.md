@@ -757,6 +757,15 @@ Recommended combinations:
 
 If no reachable Web base URL or history record is available, DSA should not generate a misleading full-report link. If Feishu document creation or image rendering fails, delivery falls back to the existing text / chunked message path. Run `python main.py --check-notify` to see the recommended delivery shape and image-rendering dependency diagnostics for configured channels.
 
+### Compatibility and issue-tracking note (notification rollout)
+
+- This scope is part of the `#1311` umbrella split (P0-P7). Please link phase PRs with `Refs #1311` rather than closing the umbrella issue directly in a single PR.
+- Delivery rollout only adjusts notification shape and fallback behavior; it does not change model names, provider settings, Base URL semantics, LLM config cleanup, or persistence migration behavior. Rollback path remains reverting related runtime behavior to the previous version.
+- Compatibility verification:
+  - Official references: <https://docs.litellm.ai/docs/providers/openai_compatible>, <https://platform.openai.com/docs/api-reference/chat/create>
+  - Dependency window: `litellm>=1.80.10,!=1.82.7,!=1.82.8,<2.0.0` in `requirements.txt`
+  - Regression checks: `tests/test_notification_diagnostics.py`, `tests/test_feishu_doc.py`, and output from `python main.py --check-notify`.
+
 ### Discord
 
 Discord supports two push methods:

@@ -2,6 +2,8 @@
 
 本文档记录通知能力 P0-P7 终态：渠道、配置 key、GitHub Actions 映射、Web 设置元数据、CLI 诊断口径、Web 一键测试、自定义 Webhook Body 模板语义、通知路由策略、降噪机制、聚合报告失败隔离、ntfy / Gotify 一等渠道、WebPush / Apprise 评估，以及本地 / Docker / GitHub Actions / Desktop 场景化配置说明。P0 只做基线与只读诊断；P1 增加 Web 单渠道真实测试；P2 产品化现有 Body 模板；P3 增加 report / alert / system_error 路由；P4 增加进程内降噪；P5 强化测试诊断和聚合报告逐渠道失败隔离；P6-A 新增 ntfy；P6-C 新增 Gotify；P6-D 只评估 WebPush / Apprise；P7 收口文档与 Actions env 对照表自动化，不新增运行时依赖、配置入口、per-URL 模板、跨进程持久化、真实每日摘要或重试循环。
 
+此文档属于 `#1311` umbrella issue 的分阶段落地内容。建议该链路 PR 说明使用 `Refs #1311` 保持可追踪，而非 `Closes #1311` 直接关闭主 issue。
+
 ## 渠道基线
 
 | 渠道 | 类型 | Minimal key | Advanced key | 说明 |
@@ -132,6 +134,8 @@ package 的 `metadata` 会过滤疑似敏感键，例如 token、secret、passwo
 - `FEISHU_MAX_BYTES`、`WECHAT_MAX_BYTES`、`WECHAT_MSG_TYPE` 继续兼容现有分片和消息类型逻辑。
 - `FEISHU_FOLDER_TOKEN` 只参与飞书云文档创建；`FEISHU_WEBHOOK_URL` 才负责把摘要消息发到群。
 - 单一渠道的渲染失败、云文档失败或转图失败，应回退到现有文本 / 分片路径，不影响其他渠道和主分析流程。
+- 飞书云文档链接入口需保留文本可访问性：优先保持 Markdown 链接原文（含 URL），若转换路径降级，应退化为 `文案 (URL)` 形式；`FEISHU_WEBHOOK_URL`、`MARKDOWN_TO_IMAGE_CHANNELS` 等普通配置文本也不应被误认为 Markdown 语法而被删除。
+- 外部模型/API 与运行时语义边界不变：本专题不改模型名、provider、Base URL、LLM 配置清理或迁移逻辑。兼容核验依据与回退路径见完整指南中的说明，并以 `tests/test_notification_diagnostics.py`、`tests/test_feishu_doc.py` 为回归入口。
 
 ## CLI 诊断
 
