@@ -26,8 +26,13 @@ For English contributors: please fill in English. All fields marked (EN) accept 
 
 必须填写以下之一 / Fill in one of:
 - `Fixes #<issue_number>` / 非 umbrella issue 或修复问题直达（本 PR 全量修复该 issue）
-- `Refs #<issue_number>` / umbrella issue / 多个子任务拆分场景（本 PR 属于分阶段推进时使用）
+- `Refs #<issue_number>` / umbrella issue / 多个子任务拆分场景（本 PR 属于分阶段推进时使用）。**umbrella issue 不要使用 Fixes，避免自动关闭总 issue** / For umbrella/split-plan issues, use `Refs` and avoid `Fixes` to prevent auto-closing parent issue.
 - 无 Issue 时说明原因与验收标准 / If no issue, explain the motivation and acceptance criteria
+
+示例 / Example:
+
+- `Refs #1309` / PR 为 #1309 拆分任务提交
+- `Fixes #1309` / PR 本身作为 #1309 的最终交付（不拆分场景）
 
 ## Verification Commands And Results
 
@@ -46,6 +51,11 @@ python -m pytest -m "not network"
 
 请说明兼容性影响、潜在风险（如无请写 `None`）。  
 *(EN) Describe compatibility impact and potential risks (write `None` if not applicable).*
+
+- 本轮为 #1309 拆分任务时的兼容性边界结论（先填本段可减少审查歧义）：
+  - 本 PR 未新增/修改 provider、model、Base URL、SDK 接入窗口、模型默认名、`litellm_model` / `llm_model_list` 语义，也未新增 `.env` 配置迁移或运行时保存/清理/回填逻辑。
+  - 外部模型/API 兼容检测若有命中，主要原因是仓库中既有文档/说明存在 model/provider/Base URL 术语，不代表本轮新增了外部模型/API 兼容语义变更；本轮兼容风险仅限已有运行时路径（未扩展 provider 或 API 入口）。
+  - 本 PR 回退路径：版本回滚到上一个版本（`revert this PR`）。
 
 - 若本 PR 修改第三方模型 / API 的兼容语义、请求参数、路由前缀或 provider fallback，请提供**官方来源链接或公告**，并说明这是长期约束、当前运行时约束还是临时兼容处理。  
   *(EN) If this PR changes third-party model/API compatibility, request parameters, routing prefixes, or provider fallback behavior, include an **official source link or announcement** and clarify whether the rule is permanent, runtime-specific, or a temporary compatibility workaround.)*
@@ -81,5 +91,6 @@ python -m pytest -m "not network"
 - [ ] 本 PR 有明确动机和业务价值 / This PR has a clear motivation and value
 - [ ] 已提供可复现的验证命令与结果 / Reproducible verification commands and results are included
 - [ ] 已评估兼容性与风险 / Compatibility and risk have been assessed
+- [ ] 本 PR 已按 umbrella issue 规则填写 Issue Link（若为拆分提交请使用 Refs） / Issue link follows umbrella split rule (use `Refs` when applicable)
 - [ ] 已提供回滚方案 / A rollback plan is provided
 - [ ] 若涉及用户可见变更，已同步更新相关文档与 `docs/CHANGELOG.md`；`README.md` 仅在首页级信息变化时更新，细节优先写入 `docs/*.md` / If user-visible changes are included, relevant docs and `docs/CHANGELOG.md` are updated; `README.md` is updated only for homepage-level changes, with details kept in `docs/*.md`
