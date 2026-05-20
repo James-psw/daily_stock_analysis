@@ -140,8 +140,6 @@ daily_stock_analysis/
 
 > 兼容性说明：`REPORT_SHOW_LLM_MODEL` 维持默认 `true` 的原始展示语义，关闭时只影响底部模型文案输出。该配置不会变更 provider/model/Base URL、LiteLLM 路由、模型保存、迁移或清理语义；回退方式为恢复或删除该变量，并设为 `true`。
 
-> Issue #1367 兼容性补充：本次修复主要针对筹码分布缺失与相关降级文案（含历史输出），资金流提示是该文案归一链路中的一部分，并不代表资金流抓取链路已重构；对应代码为 `data_provider/base.py`、`src/analyzer.py`、`src/core/pipeline.py`、`src/notification.py`、`src/report_language.py`、`src/services/history_service.py`、`src/services/report_renderer.py`、`templates/report_markdown.j2`。本轮不变更模型名、provider、Base URL、`LiteLLM` 适配行为，亦不清理/重写 `LITELLM_*`、`AGENT_LITELLM_MODEL`、`VISION_MODEL`、`LLM_TEMPERATURE` 等运行时字段；回退路径为恢复 `.env` 备份或手工还原原始字段。兼容验证依赖 `requirements.txt` 锁定的 `litellm` 版本约束、`tests/test_system_config_service.py` 中既有回归用例，以及官方兼容语义说明：[LiteLLM OpenAI-compatible](https://docs.litellm.ai/docs/providers/openai_compatible)、[OpenAI Chat Completion API](https://platform.openai.com/docs/api-reference/chat)。
-
 #### 其他配置
 
 | Secret 名称 | 说明 | 必填 |
@@ -214,7 +212,6 @@ daily_stock_analysis/
 
 > 完整说明见 [LLM 配置指南](LLM_CONFIG_GUIDE.md)（三层配置、渠道模式、Vision、Agent、排错）；常用服务商预设、Actions 变量对照和错误排障见 [LLM 服务商配置指南](llm-providers.md)。
 > 兼容性说明（Issue #1306）：本次改动只复用已有历史写入链路展示大盘复盘结果，不修改模型名、provider、Base URL、`LiteLLM` 清理/兼容语义。回退路径为回滚本版本。兼容验证来源见 `requirements.txt`（`litellm` 版本约束）、`docs/LLM_CONFIG_GUIDE*.md`，以及回归用例 `tests/test_analysis_api_contract.py`、`tests/test_analysis_history.py`、`tests/test_market_review.py`；官方源参考：[LiteLLM OpenAI-compatible](https://docs.litellm.ai/docs/providers/openai_compatible)、[OpenAI Chat Completion API](https://platform.openai.com/docs/api-reference/chat)。
-> Issue #1367 兼容性补充：本轮未新增或调整模型/provider/Base URL/LiteLLM 兼容逻辑，仅补齐筹码分布缺失/资金流文案归一的展示链路；未清理用户既有 LLM 运行时配置，回退路径同样为恢复 `.env` 配置或回滚本次变更。与模型/运行时兼容相关的判断与回退语义保持现状，对应回归仍沿用 `tests/test_system_config_service.py` 的既有用例（`test_update_switching_to_kimi_does_not_rewrite_saved_llm_temperature`、`test_update_runtime_model_cleanup_does_not_rewrite_temperature`）。
 > 本节仅同步模型/渠道配置清单，不额外引入新的外部 provider / Base URL 兼容约定；兼容语义以当前仓库 `requirements.txt` 依赖约束和相关测试为准，历史回退路径见上述两份文档中“回退/恢复”说明。
 
 | 变量名 | 说明 | 默认值 | 必填 |

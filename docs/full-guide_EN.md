@@ -135,8 +135,6 @@ Go to your forked repo → `Settings` → `Secrets and variables` → `Actions` 
 
 > Compatibility note: `REPORT_SHOW_LLM_MODEL` keeps the previous default-visible behavior (`true`) and only changes report footer rendering. It does not alter provider/model/Base URL, LiteLLM routing, or runtime model persistence/migration/cleanup semantics. Rollback is to remove the variable or set it back to `true`.
 
-> Issue #1367 compatibility note: this change focuses on chip-distribution missing-data and fallback wording paths (including historical output wording), while the “capital-flow” message here is aligned to that same presentation path and not a capital-flow feed refactor; code touched: `data_provider/base.py`, `src/analyzer.py`, `src/core/pipeline.py`, `src/notification.py`, `src/report_language.py`, `src/services/history_service.py`, `src/services/report_renderer.py`, `templates/report_markdown.j2`. This round does not change model/provider/base URL/LiteLLM compatibility behavior, and does not clear/rewrite runtime fields such as `LITELLM_*`, `AGENT_LITELLM_MODEL`, `VISION_MODEL`, or `LLM_TEMPERATURE`. Rollback is to restore a previous `.env` backup or manual config. Compatibility is verified by the repo dependency constraints in `requirements.txt`, existing regressions in `tests/test_system_config_service.py`, and official references: [LiteLLM OpenAI-compatible](https://docs.litellm.ai/docs/providers/openai_compatible), [OpenAI Chat Completion API](https://platform.openai.com/docs/api-reference/chat).
-
 #### Other Configuration
 
 | Secret Name | Description | Required |
@@ -190,7 +188,6 @@ Default schedule: Every weekday at **18:00 (Beijing Time)** automatic execution.
 
 > Full details: [LLM Config Guide](LLM_CONFIG_GUIDE_EN.md) (three-tier config, channels, Vision, Agent, troubleshooting).
 > Compatibility note for Issue #1306: this change only persists and exposes existing market-review output via history paths, and does not alter model name, provider, base URL, LiteLLM cleanup rules, or `.env` runtime migration semantics. Rollback is to revert this change set. Runtime compatibility references are `requirements.txt` (`litellm` constraints), `docs/LLM_CONFIG_GUIDE_EN.md`, and regression tests in `tests/test_analysis_api_contract.py`, `tests/test_analysis_history.py`, `tests/test_market_review.py`; official references: [LiteLLM OpenAI-compatible](https://docs.litellm.ai/docs/providers/openai_compatible), [OpenAI Chat Completion API](https://platform.openai.com/docs/api-reference/chat).
-> Issue #1367 compatibility note: this round does not change model/provider/base URL/LiteLLM compatibility behavior. It only tightens fallback wording for missing chip-distribution (including related capital-flow wording) and report history output; no runtime model field is auto-cleared or rewritten. Regression evidence is in existing `tests/test_system_config_service.py` cases (`test_update_switching_to_kimi_does_not_rewrite_saved_llm_temperature`, `test_update_runtime_model_cleanup_does_not_rewrite_temperature`).
 
 | Variable | Description | Default | Required |
 |--------|------|--------|:----:|
