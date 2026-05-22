@@ -937,28 +937,33 @@ function startBackend({ port, envFile, dbPath, logDir }) {
 
 function waitForBackendExit(processRef, timeoutMs = 5000) {
   if (!processRef || processRef.exitCode !== null || processRef.signalCode) {
-    return Promise.resolve();
+    return Promise.resolve(true);
   }
 
   return new Promise((resolve) => {
     let settled = false;
     let timer = null;
+    let onExit = null;
 
-    const done = () => {
+    const done = (exited) => {
       if (settled) {
         return;
       }
       settled = true;
       clearTimeout(timer);
-      processRef.removeListener('exit', done);
-      resolve();
+      if (onExit) {
+        processRef.removeListener('exit', onExit);
+      }
+      resolve(exited || processRef.exitCode !== null || Boolean(processRef.signalCode));
     };
 
+    onExit = () => done(true);
+
     timer = setTimeout(() => {
-      done();
+      done(false);
     }, timeoutMs);
 
-    processRef.once('exit', done);
+    processRef.once('exit', onExit);
   });
 }
 
@@ -983,7 +988,10 @@ function stopBackend() {
   }
 
   const waitAndClear = () => waitForBackendExit(processToStop, 10000)
-    .finally(() => {
+    .then((exited) => {
+      if (!exited) {
+        return;
+      }
       clearBackendProcessIfCurrent(processToStop);
     });
 

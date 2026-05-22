@@ -725,3 +725,37 @@ test('stopBackend waits for backend process exit', async (t) => {
   assert.equal(killSignals.includes('SIGTERM'), true);
   assert.equal(mainModule.__getBackendProcessForTest(), null);
 });
+
+test('stopBackend keeps backend process reference when exit wait times out', async (t) => {
+  const mainModule = loadMainModule(t);
+  const originalSetTimeout = global.setTimeout;
+  const killSignals = [];
+  const fakeBackend = new EventEmitter();
+
+  fakeBackend.pid = 4321;
+  fakeBackend.killed = false;
+  fakeBackend.exitCode = null;
+  fakeBackend.signalCode = null;
+  fakeBackend.kill = (signal) => {
+    killSignals.push(signal);
+    fakeBackend.killed = true;
+  };
+
+  global.setTimeout = (callback, delay, ...args) => (
+    originalSetTimeout(callback, delay >= 3000 ? 0 : delay, ...args)
+  );
+  mainModule.__setBackendProcessForTest(fakeBackend);
+
+  t.after(() => {
+    global.setTimeout = originalSetTimeout;
+    mainModule.__setBackendProcessForTest(null);
+  });
+
+  await Promise.race([
+    mainModule.stopBackend(),
+    new Promise((_, reject) => originalSetTimeout(() => reject(new Error('stopBackend did not resolve')), 200)),
+  ]);
+
+  assert.equal(killSignals.includes('SIGTERM'), true);
+  assert.equal(mainModule.__getBackendProcessForTest(), fakeBackend);
+});
