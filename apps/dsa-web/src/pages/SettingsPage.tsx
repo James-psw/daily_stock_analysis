@@ -2,6 +2,7 @@ import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { useAuth, useSystemConfig } from '../hooks';
 import { createParsedApiError, getParsedApiError, type ParsedApiError } from '../api/error';
+import { alphasiftApi, notifyAlphaSiftConfigChanged } from '../api/alphasift';
 import { systemConfigApi } from '../api/systemConfig';
 import { ApiErrorAlert, Button, ConfirmDialog, EmptyState } from '../components/common';
 import {
@@ -205,6 +206,7 @@ const SettingsPage: React.FC = () => {
   const [envBackupActionSuccess, setEnvBackupActionSuccess] = useState<string>('');
   const [isExportingEnv, setIsExportingEnv] = useState(false);
   const [isImportingEnv, setIsImportingEnv] = useState(false);
+  const [isUpdatingAlphaSift, setIsUpdatingAlphaSift] = useState(false);
   const [showImportConfirm, setShowImportConfirm] = useState(false);
   const [desktopUpdateState, setDesktopUpdateState] = useState<DesktopUpdateState | null>(null);
   const [isCheckingDesktopUpdate, setIsCheckingDesktopUpdate] = useState(false);
@@ -311,6 +313,10 @@ const SettingsPage: React.FC = () => {
 
   const rawActiveItems = itemsByCategory[activeCategory] || [];
   const rawActiveItemMap = new Map(rawActiveItems.map((item) => [item.key, String(item.value ?? '')]));
+  const alphasiftItem = (itemsByCategory.data_source || []).find((item) => item.key === 'ALPHASIFT_ENABLED');
+  const alphasiftInstallSpecItem = (itemsByCategory.data_source || []).find((item) => item.key === 'ALPHASIFT_INSTALL_SPEC');
+  const alphasiftEnabled = String(alphasiftItem?.value ?? '').trim().toLowerCase() === 'true';
+  const alphasiftInstallSpec = String(alphasiftInstallSpecItem?.value || '').trim();
   const hasConfiguredChannels = Boolean((rawActiveItemMap.get('LLM_CHANNELS') || '').trim());
   const hasLitellmConfig = Boolean((rawActiveItemMap.get('LITELLM_CONFIG') || '').trim());
 
@@ -461,6 +467,30 @@ const SettingsPage: React.FC = () => {
     }
   };
 
+  const updateAlphaSiftEnabled = async (nextEnabled: boolean) => {
+    setEnvBackupActionError(null);
+    setEnvBackupActionSuccess('');
+    setIsUpdatingAlphaSift(true);
+    try {
+      if (nextEnabled) {
+        await alphasiftApi.install();
+      }
+      await systemConfigApi.update({
+        configVersion,
+        maskToken,
+        reloadNow: true,
+        items: [{ key: 'ALPHASIFT_ENABLED', value: nextEnabled ? 'true' : 'false' }],
+      });
+      notifyAlphaSiftConfigChanged();
+      await refreshAfterExternalSave(['ALPHASIFT_ENABLED']);
+      setEnvBackupActionSuccess(nextEnabled ? '已开启 AlphaSift 选股，并完成依赖检查。' : '已关闭 AlphaSift 选股。');
+    } catch (error: unknown) {
+      setEnvBackupActionError(getParsedApiError(error));
+    } finally {
+      setIsUpdatingAlphaSift(false);
+    }
+  };
+
   const openDesktopReleasePage = async () => {
     if (!desktopRuntimeApi?.openReleasePage) {
       return;
@@ -597,6 +627,64 @@ const SettingsPage: React.FC = () => {
           </aside>
 
           <section className="space-y-4">
+            {alphasiftItem ? (
+              <SettingsSectionCard
+                title="AlphaSift 选股"
+                description="使用 AlphaSift 项目提供的 screen() 能力；开启时会自动检查并安装 Python 依赖。"
+              >
+                <div className="flex flex-col gap-4 rounded-2xl border settings-border bg-background/35 px-4 py-4 md:flex-row md:items-center md:justify-between">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">
+                      {alphasiftEnabled ? '选股已开启' : '选股未开启'}
+                    </p>
+                    <p className="mt-1 text-xs leading-6 text-muted-text">
+                      配置项：<code className="rounded bg-background/60 px-1 py-0.5 font-mono">ALPHASIFT_ENABLED</code>
+                      。开启后可在左侧导航进入“选股”，实际策略和数据处理仍由 AlphaSift 自己负责。
+                    </p>
+                    <p className="mt-1 text-xs leading-6 text-muted-text">
+                      安装来源：<code className="rounded bg-background/60 px-1 py-0.5 font-mono">{alphasiftInstallSpec || '未配置'}</code>
+                    </p>
+                    {!alphasiftInstallSpec || alphasiftInstallSpec.toLowerCase() === 'alphasift' ? (
+                      <p className="mt-1 text-xs leading-6 text-amber-700 dark:text-amber-300">
+                        请把 ALPHASIFT_INSTALL_SPEC 配置为 git+https://github.com/ZhuLinsen/alphasift.git、本地路径或 wheel 文件。
+                      </p>
+                    ) : null}
+                    <p className="mt-2 text-xs leading-6 text-amber-700 dark:text-amber-300">
+                      风险提示：选股结果仅用于研究和辅助判断，不构成投资建议；市场有风险，交易决策和损益由使用者自行承担。
+                    </p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="settings-secondary"
+                      onClick={() => setActiveCategory('data_source')}
+                    >
+                      查看配置项
+                    </Button>
+                    <Button
+                      type="button"
+                      variant={alphasiftEnabled ? 'settings-secondary' : 'settings-primary'}
+                      onClick={() => void updateAlphaSiftEnabled(!alphasiftEnabled)}
+                      disabled={isSaving || isLoading || isUpdatingAlphaSift}
+                      isLoading={isUpdatingAlphaSift}
+                      loadingText={alphasiftEnabled ? '关闭中...' : '开启中...'}
+                    >
+                      {alphasiftEnabled ? '关闭选股' : '开启选股'}
+                    </Button>
+                  </div>
+                </div>
+                {envBackupActionError ? (
+                  <div className="mt-3">
+                    <ApiErrorAlert error={envBackupActionError} />
+                  </div>
+                ) : null}
+                {!envBackupActionError && envBackupActionSuccess ? (
+                  <div className="mt-3">
+                    <SettingsAlert title="操作成功" message={envBackupActionSuccess} variant="success" />
+                  </div>
+                ) : null}
+              </SettingsSectionCard>
+            ) : null}
             {activeCategory === 'system' ? <AuthSettingsCard /> : null}
             {activeCategory === 'system' ? (
               <SettingsSectionCard

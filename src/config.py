@@ -35,6 +35,8 @@ from src.llm import generation_params as llm_generation_params
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_ALPHASIFT_INSTALL_SPEC = "git+https://github.com/ZhuLinsen/alphasift.git"
+
 
 @dataclass
 class ConfigIssue:
@@ -536,6 +538,10 @@ class Config:
     longbridge_app_key: Optional[str] = None
     longbridge_app_secret: Optional[str] = None
     longbridge_access_token: Optional[str] = None
+
+    # === AlphaSift optional stock screening integration ===
+    alphasift_enabled: bool = False
+    alphasift_install_spec: str = DEFAULT_ALPHASIFT_INSTALL_SPEC
 
     # === AI 分析配置 ===
     # LiteLLM unified model config (provider/model format, e.g. gemini/gemini-3.1-pro-preview)
@@ -1647,7 +1653,9 @@ class Config:
                 field_name='PORTFOLIO_RISK_LOOKBACK_DAYS',
                 minimum=1,
             ),
-            portfolio_fx_update_enabled=os.getenv('PORTFOLIO_FX_UPDATE_ENABLED', 'true').lower() == 'true'
+            portfolio_fx_update_enabled=os.getenv('PORTFOLIO_FX_UPDATE_ENABLED', 'true').lower() == 'true',
+            alphasift_enabled=parse_env_bool(os.getenv('ALPHASIFT_ENABLED'), default=False),
+            alphasift_install_spec=os.getenv('ALPHASIFT_INSTALL_SPEC', DEFAULT_ALPHASIFT_INSTALL_SPEC).strip() or DEFAULT_ALPHASIFT_INSTALL_SPEC,
         )
     
     @classmethod

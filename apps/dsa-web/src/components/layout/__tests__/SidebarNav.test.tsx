@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { SidebarNav } from '../SidebarNav';
 
 const mockLogout = vi.fn().mockResolvedValue(undefined);
+const mockGetAlphaSiftStatus = vi.fn().mockResolvedValue({ enabled: false, available: false, installSpec: 'alphasift' });
 const mockThemeToggle = vi.fn(({ collapsed }: { collapsed?: boolean }) => (
   <button type="button">{collapsed ? '切换主题(折叠)' : '切换主题'}</button>
 ));
@@ -22,11 +23,41 @@ vi.mock('../../../stores/agentChatStore', () => ({
     selector({ completionBadge: completionBadgeState.value }),
 }));
 
+vi.mock('../../../api/alphasift', () => ({
+  alphasiftApi: {
+    getStatus: () => mockGetAlphaSiftStatus(),
+  },
+}));
+
 vi.mock('../../theme/ThemeToggle', () => ({
   ThemeToggle: (props: { collapsed?: boolean }) => mockThemeToggle(props),
 }));
 
 describe('SidebarNav', () => {
+  it('hides the screening navigation item while AlphaSift is disabled', () => {
+    mockGetAlphaSiftStatus.mockResolvedValueOnce({ enabled: false, available: false, installSpec: 'alphasift' });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SidebarNav />
+      </MemoryRouter>,
+    );
+
+    expect(screen.queryByRole('link', { name: '选股' })).not.toBeInTheDocument();
+  });
+
+  it('shows the screening navigation item when AlphaSift is enabled', async () => {
+    mockGetAlphaSiftStatus.mockResolvedValueOnce({ enabled: true, available: false, installSpec: 'alphasift' });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <SidebarNav />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('link', { name: '选股' })).toHaveAttribute('href', '/screening');
+  });
+
   it('shows the shared completion badge only when chat completion is pending', () => {
     completionBadgeState.value = true;
 

@@ -343,6 +343,36 @@ export function parseApiError(error: unknown): ParsedApiError {
     });
   }
 
+  if (errorCode === 'alphasift_install_failed') {
+    return createParsedApiError({
+      title: 'AlphaSift 自动安装失败',
+      message: 'DSA 已尝试自动安装 AlphaSift，但 pip 安装未成功。请检查 ALPHASIFT_INSTALL_SPEC、网络代理或本地路径是否正确。',
+      rawMessage,
+      status,
+      category: 'http_error',
+    });
+  }
+
+  if (errorCode === 'alphasift_install_spec_missing') {
+    return createParsedApiError({
+      title: 'AlphaSift 安装来源未配置',
+      message: '请先在设置页把 ALPHASIFT_INSTALL_SPEC 配置为 git+https://github.com/ZhuLinsen/alphasift.git、本地路径或 wheel 文件，再开启选股。',
+      rawMessage,
+      status,
+      category: 'http_error',
+    });
+  }
+
+  if (errorCode === 'alphasift_unavailable' || includesAny(matchText, ['cannot import alphasift', 'alphasift.screen'])) {
+    return createParsedApiError({
+      title: 'AlphaSift 未就绪',
+      message: '当前 DSA 后端环境无法导入 alphasift。请先安装或挂载 AlphaSift，例如在同一个 Python 环境执行 python -m pip install -e /path/to/alphasift。',
+      rawMessage,
+      status,
+      category: 'http_error',
+    });
+  }
+
   const noConfiguredLlm = (
     includesAny(matchText, ['all llm models failed']) && includesAny(matchText, ['last error: none'])
   ) || includesAny(matchText, [
