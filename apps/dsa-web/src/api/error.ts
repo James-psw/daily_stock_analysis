@@ -346,7 +346,7 @@ export function parseApiError(error: unknown): ParsedApiError {
   if (errorCode === 'alphasift_install_failed') {
     return createParsedApiError({
       title: 'AlphaSift 自动安装失败',
-      message: 'DSA 已尝试自动安装 AlphaSift，但 pip 安装未成功。请检查 ALPHASIFT_INSTALL_SPEC、网络代理或本地路径是否正确。',
+      message: 'DSA 已尝试自动安装 AlphaSift，但 pip 安装未成功。请检查 ALPHASIFT_INSTALL_SPEC、网络代理或后端 Python 环境。',
       rawMessage,
       status,
       category: 'http_error',
@@ -356,7 +356,17 @@ export function parseApiError(error: unknown): ParsedApiError {
   if (errorCode === 'alphasift_install_spec_missing') {
     return createParsedApiError({
       title: 'AlphaSift 安装来源未配置',
-      message: '请先在设置页把 ALPHASIFT_INSTALL_SPEC 配置为 git+https://github.com/ZhuLinsen/alphasift.git、本地路径或 wheel 文件，再开启选股。',
+      message: '请先在设置页把 ALPHASIFT_INSTALL_SPEC 配置为 git+https://github.com/ZhuLinsen/alphasift.git，再开启选股。',
+      rawMessage,
+      status,
+      category: 'http_error',
+    });
+  }
+
+  if (errorCode === 'alphasift_install_spec_not_allowed') {
+    return createParsedApiError({
+      title: 'AlphaSift 安装来源受限',
+      message: '自动安装仅允许使用 AlphaSift 官方 GitHub 来源；如需本地路径或 wheel，请先手动安装到当前 Python 环境。',
       rawMessage,
       status,
       category: 'http_error',

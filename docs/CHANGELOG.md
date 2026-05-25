@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - [改进] 开启 AlphaSift 选股时自动检查并按 `ALPHASIFT_INSTALL_SPEC` 安装依赖，同时在页面展示投资风险提示。
 - [改进] AlphaSift 关闭时隐藏 Web 左侧“选股”导航入口，避免误导未开启用户。
 - [修复] AlphaSift 默认安装来源改为 `git+https://github.com/ZhuLinsen/alphasift.git`，避免误用不存在的 PyPI 包名。
+- [修复] AlphaSift 自动安装前限制安装来源，避免未认证调用触发任意 pip 安装。
 
 <!-- 新条目格式：- [类型] 描述（类型取值：新功能/改进/修复/文档/测试/chore）-->
 <!-- 每条独立一行追加到本段末尾，无需分类标题，合并时冲突最小 -->

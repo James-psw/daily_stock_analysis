@@ -455,7 +455,7 @@ _FIELD_DEFINITIONS: Dict[str, Dict[str, Any]] = {
     },
     "ALPHASIFT_INSTALL_SPEC": {
         "title": "AlphaSift Install Spec",
-        "description": "pip install spec used when enabling AlphaSift. Defaults to the official GitHub repository.",
+        "description": "pip install spec used when enabling AlphaSift. Automatic install only accepts the trusted official GitHub repository.",
         "category": "data_source",
         "data_type": "string",
         "ui_control": "text",

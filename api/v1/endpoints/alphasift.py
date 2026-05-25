@@ -13,9 +13,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.deps import get_config_dep
-from src.config import Config
+from src.config import Config, DEFAULT_ALPHASIFT_INSTALL_SPEC
 
 router = APIRouter()
+
+ALLOWED_ALPHASIFT_INSTALL_SPECS = frozenset({DEFAULT_ALPHASIFT_INSTALL_SPEC})
 
 
 class AlphaSiftScreenRequest(BaseModel):
@@ -35,6 +37,7 @@ def alphasift_status(config: Config = Depends(get_config_dep)) -> Dict[str, Any]
 
 @router.post("/install")
 def alphasift_install(config: Config = Depends(get_config_dep)) -> Dict[str, Any]:
+    _ensure_alphasift_enabled(config)
     return _install_alphasift(config)
 
 
@@ -42,18 +45,7 @@ def _install_alphasift(config: Config) -> Dict[str, Any]:
     if _is_alphasift_available():
         return {"installed": True, "already_installed": True, "install_spec": config.alphasift_install_spec}
 
-    install_spec = (config.alphasift_install_spec or "").strip()
-    if not install_spec or install_spec.lower() == "alphasift":
-        raise HTTPException(
-            status_code=424,
-            detail={
-                "error": "alphasift_install_spec_missing",
-                "message": (
-                    "请先将 ALPHASIFT_INSTALL_SPEC 配置为真实可安装来源，例如 "
-                    "git+https://github.com/ZhuLinsen/alphasift.git、本地路径或 wheel 文件。"
-                ),
-            },
-        )
+    install_spec = _validate_install_spec(config.alphasift_install_spec)
 
     try:
         completed = subprocess.run(
@@ -75,7 +67,10 @@ def _install_alphasift(config: Config) -> Dict[str, Any]:
         detail = stderr or stdout or f"pip exited with code {completed.returncode}"
         raise HTTPException(
             status_code=424,
-            detail={"error": "alphasift_install_failed", "message": f"自动安装 AlphaSift 失败：{detail}"},
+            detail={
+                "error": "alphasift_install_failed",
+                "message": f"自动安装 AlphaSift 失败：{detail}",
+            },
         )
 
     importlib.invalidate_caches()
@@ -88,16 +83,38 @@ def _install_alphasift(config: Config) -> Dict[str, Any]:
     return {"installed": True, "already_installed": False, "install_spec": install_spec}
 
 
+def _validate_install_spec(raw_install_spec: str) -> str:
+    install_spec = (raw_install_spec or "").strip()
+    if not install_spec or install_spec.lower() == "alphasift":
+        raise HTTPException(
+            status_code=424,
+            detail={
+                "error": "alphasift_install_spec_missing",
+                "message": f"请先将 ALPHASIFT_INSTALL_SPEC 配置为受信任来源：{DEFAULT_ALPHASIFT_INSTALL_SPEC}。",
+            },
+        )
+
+    if install_spec not in ALLOWED_ALPHASIFT_INSTALL_SPECS:
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "alphasift_install_spec_not_allowed",
+                "message": (
+                    "出于安全考虑，自动安装 AlphaSift 仅允许使用受信任来源："
+                    f"{DEFAULT_ALPHASIFT_INSTALL_SPEC}。如需使用本地路径或 wheel，请先手动安装到当前 Python 环境。"
+                ),
+            },
+        )
+
+    return install_spec
+
+
 @router.post("/screen")
 def alphasift_screen(
     request: AlphaSiftScreenRequest,
     config: Config = Depends(get_config_dep),
 ) -> Dict[str, Any]:
-    if not config.alphasift_enabled:
-        raise HTTPException(
-            status_code=403,
-            detail={"error": "alphasift_disabled", "message": "ALPHASIFT_ENABLED is false."},
-        )
+    _ensure_alphasift_enabled(config)
 
     try:
         alphasift = _import_alphasift()
@@ -126,6 +143,14 @@ def alphasift_screen(
         "candidates": candidates[: request.max_results],
         "candidate_count": len(candidates[: request.max_results]),
     }
+
+
+def _ensure_alphasift_enabled(config: Config) -> None:
+    if not config.alphasift_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "alphasift_disabled", "message": "ALPHASIFT_ENABLED is false."},
+        )
 
 
 def _is_alphasift_available() -> bool:

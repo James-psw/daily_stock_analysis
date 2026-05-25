@@ -15,17 +15,25 @@ ALPHASIFT_INSTALL_SPEC=git+https://github.com/ZhuLinsen/alphasift.git
 `ALPHASIFT_ENABLED=true`、重新加载运行时配置，并按 `ALPHASIFT_INSTALL_SPEC`
 执行一次自动安装或可用性检查。
 
-`ALPHASIFT_INSTALL_SPEC` 是传给 pip 的安装参数，默认从 GitHub 安装：
+`ALPHASIFT_INSTALL_SPEC` 是传给 pip 的安装参数。为避免未认证调用触发任意 pip 安装，后端自动安装只接受下列受信任来源：
 
 ```bash
 python -m pip install git+https://github.com/ZhuLinsen/alphasift.git
 ```
 
-如需使用本地开发版本，也可以改成本地路径或 wheel 文件，例如：
+如需使用本地开发版本、固定 commit 或 wheel 文件，请先在同一个 Python 环境中手动安装，然后再开启 `ALPHASIFT_ENABLED`：
 
 ```bash
 python -m pip install -e /path/to/alphasift
 ```
+
+DSA 调用的 AlphaSift 接口固定为：
+
+```python
+alphasift.screen(strategy, market=market, max_output=max_results, use_llm=False)
+```
+
+若 AlphaSift 接口不兼容或自动安装失败，可将 `ALPHASIFT_ENABLED=false` 回退为关闭状态；已手动安装的包由运行环境自行管理。
 
 ## 接口
 

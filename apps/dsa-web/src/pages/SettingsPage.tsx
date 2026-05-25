@@ -200,6 +200,8 @@ function formatEnvBackupFilename(isDesktopRuntime: boolean) {
   return `${isDesktopRuntime ? 'dsa-desktop-env' : 'dsa-env'}_${date}_${time}.env`;
 }
 
+const TRUSTED_ALPHASIFT_INSTALL_SPEC = 'git+https://github.com/ZhuLinsen/alphasift.git';
+
 const SettingsPage: React.FC = () => {
   const { authEnabled, passwordChangeable } = useAuth();
   const [envBackupActionError, setEnvBackupActionError] = useState<ParsedApiError | null>(null);
@@ -317,6 +319,7 @@ const SettingsPage: React.FC = () => {
   const alphasiftInstallSpecItem = (itemsByCategory.data_source || []).find((item) => item.key === 'ALPHASIFT_INSTALL_SPEC');
   const alphasiftEnabled = String(alphasiftItem?.value ?? '').trim().toLowerCase() === 'true';
   const alphasiftInstallSpec = String(alphasiftInstallSpecItem?.value || '').trim();
+  const alphasiftInstallSpecAllowed = alphasiftInstallSpec === TRUSTED_ALPHASIFT_INSTALL_SPEC;
   const hasConfiguredChannels = Boolean((rawActiveItemMap.get('LLM_CHANNELS') || '').trim());
   const hasLitellmConfig = Boolean((rawActiveItemMap.get('LITELLM_CONFIG') || '').trim());
 
@@ -644,9 +647,9 @@ const SettingsPage: React.FC = () => {
                     <p className="mt-1 text-xs leading-6 text-muted-text">
                       安装来源：<code className="rounded bg-background/60 px-1 py-0.5 font-mono">{alphasiftInstallSpec || '未配置'}</code>
                     </p>
-                    {!alphasiftInstallSpec || alphasiftInstallSpec.toLowerCase() === 'alphasift' ? (
+                    {!alphasiftInstallSpecAllowed ? (
                       <p className="mt-1 text-xs leading-6 text-amber-700 dark:text-amber-300">
-                        请把 ALPHASIFT_INSTALL_SPEC 配置为 git+https://github.com/ZhuLinsen/alphasift.git、本地路径或 wheel 文件。
+                        请把 ALPHASIFT_INSTALL_SPEC 配置为 git+https://github.com/ZhuLinsen/alphasift.git；本地路径或 wheel 需先手动安装。
                       </p>
                     ) : null}
                     <p className="mt-2 text-xs leading-6 text-amber-700 dark:text-amber-300">

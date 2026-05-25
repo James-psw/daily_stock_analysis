@@ -3,125 +3,115 @@
 
 from __future__ import annotations
 
-import os
 import sys
-import tempfile
 import unittest
-from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
-from fastapi.testclient import TestClient
+from fastapi import HTTPException
 
 try:
     import litellm  # noqa: F401
 except ModuleNotFoundError:
     sys.modules["litellm"] = MagicMock()
 
-import src.auth as auth
-from api.app import create_app
+from api.v1.endpoints import alphasift as alphasift_endpoint
 from src.config import Config
-from src.storage import DatabaseManager
 
 DEFAULT_ALPHASIFT_TEST_SPEC = "git+https://github.com/ZhuLinsen/alphasift.git"
 
 
-def _reset_auth_globals() -> None:
-    auth._auth_enabled = None
-    auth._session_secret = None
-    auth._password_hash_salt = None
-    auth._password_hash_stored = None
-    auth._rate_limit = {}
+def _alphasift_unavailable() -> HTTPException:
+    return HTTPException(
+        status_code=424,
+        detail={"error": "alphasift_unavailable", "message": "AlphaSift is unavailable"},
+    )
+
+
+def _raise_alphasift_unavailable() -> None:
+    raise _alphasift_unavailable()
 
 
 class AlphaSiftOpportunitiesApiTestCase(unittest.TestCase):
     def setUp(self) -> None:
-        _reset_auth_globals()
-        self.temp_dir = tempfile.TemporaryDirectory()
-        self.data_dir = Path(self.temp_dir.name)
-        self.env_path = self.data_dir / ".env"
-        self.db_path = self.data_dir / "alphasift_api_test.db"
-        os.environ["ENV_FILE"] = str(self.env_path)
-        os.environ["DATABASE_PATH"] = str(self.db_path)
+        Config.reset_instance()
 
     def tearDown(self) -> None:
-        DatabaseManager.reset_instance()
         Config.reset_instance()
-        os.environ.pop("ENV_FILE", None)
-        os.environ.pop("DATABASE_PATH", None)
-        os.environ.pop("ALPHASIFT_ENABLED", None)
-        os.environ.pop("ALPHASIFT_INSTALL_SPEC", None)
-        self.temp_dir.cleanup()
 
-    def _client(self, *, enabled: bool, install_spec: str = DEFAULT_ALPHASIFT_TEST_SPEC) -> TestClient:
-        self.env_path.write_text(
-            "\n".join(
-                [
-                    "STOCK_LIST=600519",
-                    "GEMINI_API_KEY=test",
-                    "ADMIN_AUTH_ENABLED=false",
-                    f"DATABASE_PATH={self.db_path}",
-                    f"ALPHASIFT_ENABLED={'true' if enabled else 'false'}",
-                    f"ALPHASIFT_INSTALL_SPEC={install_spec}",
-                ]
-            )
-            + "\n",
-            encoding="utf-8",
+    def _config(self, *, enabled: bool, install_spec: str = DEFAULT_ALPHASIFT_TEST_SPEC) -> Config:
+        return Config(alphasift_enabled=enabled, alphasift_install_spec=install_spec)
+
+    def _screen(self, config: Config, **kwargs):
+        return alphasift_endpoint.alphasift_screen(
+            alphasift_endpoint.AlphaSiftScreenRequest(**kwargs),
+            config=config,
         )
-        Config.reset_instance()
-        DatabaseManager.reset_instance()
-        os.environ["ALPHASIFT_ENABLED"] = "true" if enabled else "false"
-        os.environ["ALPHASIFT_INSTALL_SPEC"] = install_spec
-        return TestClient(create_app(static_dir=self.data_dir / "empty-static"))
 
     def test_status_defaults_to_disabled(self) -> None:
-        client = self._client(enabled=False)
+        config = self._config(enabled=False)
 
-        resp = client.get("/api/v1/alphasift/status")
+        with patch("api.v1.endpoints.alphasift._is_alphasift_available", return_value=False):
+            payload = alphasift_endpoint.alphasift_status(config=config)
 
-        self.assertEqual(resp.status_code, 200)
-        payload = resp.json()
         self.assertEqual(payload["enabled"], False)
         self.assertEqual(payload["install_spec"], DEFAULT_ALPHASIFT_TEST_SPEC)
 
     def test_screen_rejects_when_disabled(self) -> None:
-        client = self._client(enabled=False)
+        config = self._config(enabled=False)
 
-        resp = client.post("/api/v1/alphasift/screen", json={})
+        with self.assertRaises(HTTPException) as caught:
+            self._screen(config)
 
-        self.assertEqual(resp.status_code, 403)
-        self.assertEqual(resp.json()["error"], "alphasift_disabled")
+        self.assertEqual(caught.exception.status_code, 403)
+        self.assertEqual(caught.exception.detail["error"], "alphasift_disabled")
 
     def test_screen_reports_alphasift_install_failure(self) -> None:
-        client = self._client(enabled=True)
+        config = self._config(enabled=True)
         completed = SimpleNamespace(returncode=1, stdout="", stderr="not found")
 
         with (
             patch("api.v1.endpoints.alphasift.subprocess.run", return_value=completed),
-            patch("api.v1.endpoints.alphasift.importlib.import_module", side_effect=ModuleNotFoundError("No module named 'alphasift'")),
+            patch("api.v1.endpoints.alphasift._import_alphasift", side_effect=_raise_alphasift_unavailable),
         ):
-            resp = client.post("/api/v1/alphasift/screen", json={})
+            with self.assertRaises(HTTPException) as caught:
+                self._screen(config)
 
-        self.assertEqual(resp.status_code, 424)
-        payload = resp.json()
+        self.assertEqual(caught.exception.status_code, 424)
+        payload = caught.exception.detail
         self.assertEqual(payload["error"], "alphasift_install_failed")
         self.assertIn("AlphaSift", payload["message"])
 
     def test_screen_rejects_pypi_placeholder_without_running_pip(self) -> None:
-        client = self._client(enabled=True, install_spec="alphasift")
+        config = self._config(enabled=True, install_spec="alphasift")
 
         with (
             patch("api.v1.endpoints.alphasift.subprocess.run") as run_mock,
-            patch("api.v1.endpoints.alphasift.importlib.import_module", side_effect=ModuleNotFoundError("No module named 'alphasift'")),
+            patch("api.v1.endpoints.alphasift._import_alphasift", side_effect=_raise_alphasift_unavailable),
         ):
-            resp = client.post("/api/v1/alphasift/screen", json={})
+            with self.assertRaises(HTTPException) as caught:
+                self._screen(config)
 
-        self.assertEqual(resp.status_code, 424)
-        self.assertEqual(resp.json()["error"], "alphasift_install_spec_missing")
+        self.assertEqual(caught.exception.status_code, 424)
+        self.assertEqual(caught.exception.detail["error"], "alphasift_install_spec_missing")
+        run_mock.assert_not_called()
+
+    def test_screen_rejects_untrusted_install_spec_without_running_pip(self) -> None:
+        config = self._config(enabled=True, install_spec="git+https://example.com/evil/alphasift.git")
+
+        with (
+            patch("api.v1.endpoints.alphasift.subprocess.run") as run_mock,
+            patch("api.v1.endpoints.alphasift._import_alphasift", side_effect=_raise_alphasift_unavailable),
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                self._screen(config)
+
+        self.assertEqual(caught.exception.status_code, 403)
+        self.assertEqual(caught.exception.detail["error"], "alphasift_install_spec_not_allowed")
         run_mock.assert_not_called()
 
     def test_screen_auto_installs_alphasift_package_when_enabled(self) -> None:
-        client = self._client(enabled=True)
+        config = self._config(enabled=True)
         fake_module = SimpleNamespace(
             screen=MagicMock(return_value=[{"code": "600519", "name": "Kweichow Moutai", "score": 88.5}])
         )
@@ -130,74 +120,69 @@ class AlphaSiftOpportunitiesApiTestCase(unittest.TestCase):
         with (
             patch("api.v1.endpoints.alphasift.subprocess.run", return_value=completed) as run_mock,
             patch(
-                "api.v1.endpoints.alphasift.importlib.import_module",
+                "api.v1.endpoints.alphasift._import_alphasift",
                 side_effect=[
-                    ModuleNotFoundError("No module named 'alphasift'"),
-                    ModuleNotFoundError("No module named 'alphasift'"),
+                    _alphasift_unavailable(),
+                    _alphasift_unavailable(),
                     fake_module,
                     fake_module,
                 ],
             ),
         ):
-            resp = client.post(
-                "/api/v1/alphasift/screen",
-                json={"market": "cn", "strategy": "dual_low", "max_results": 5},
-            )
+            payload = self._screen(config, market="cn", strategy="dual_low", max_results=5)
 
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["candidate_count"], 1)
+        self.assertEqual(payload["candidate_count"], 1)
         run_mock.assert_called_once()
 
-    def test_install_can_run_before_enable(self) -> None:
-        client = self._client(enabled=False)
-        fake_module = SimpleNamespace(screen=MagicMock())
+    def test_install_rejects_when_disabled_without_side_effects(self) -> None:
+        config = self._config(enabled=False)
 
-        with patch("api.v1.endpoints.alphasift.importlib.import_module", return_value=fake_module):
-            resp = client.post("/api/v1/alphasift/install")
+        with (
+            patch("api.v1.endpoints.alphasift.subprocess.run") as run_mock,
+            patch("api.v1.endpoints.alphasift._import_alphasift") as import_mock,
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                alphasift_endpoint.alphasift_install(config=config)
 
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["already_installed"], True)
+        self.assertEqual(caught.exception.status_code, 403)
+        self.assertEqual(caught.exception.detail["error"], "alphasift_disabled")
+        import_mock.assert_not_called()
+        run_mock.assert_not_called()
 
     def test_install_invokes_pip_when_enabled_and_missing(self) -> None:
-        client = self._client(enabled=True)
+        config = self._config(enabled=True)
         fake_module = SimpleNamespace(screen=MagicMock())
         completed = SimpleNamespace(returncode=0, stdout="installed", stderr="")
 
         with (
             patch("api.v1.endpoints.alphasift.subprocess.run", return_value=completed) as run_mock,
             patch(
-                "api.v1.endpoints.alphasift.importlib.import_module",
-                side_effect=[ModuleNotFoundError("No module named 'alphasift'"), fake_module],
+                "api.v1.endpoints.alphasift._import_alphasift",
+                side_effect=[_alphasift_unavailable(), fake_module],
             ),
         ):
-            resp = client.post("/api/v1/alphasift/install")
+            payload = alphasift_endpoint.alphasift_install(config=config)
 
-        self.assertEqual(resp.status_code, 200)
-        self.assertEqual(resp.json()["installed"], True)
-        self.assertEqual(resp.json()["already_installed"], False)
+        self.assertEqual(payload["installed"], True)
+        self.assertEqual(payload["already_installed"], False)
         run_mock.assert_called_once()
         self.assertIn(DEFAULT_ALPHASIFT_TEST_SPEC, run_mock.call_args.args[0])
 
     def test_screen_calls_alphasift_package_when_enabled(self) -> None:
-        client = self._client(enabled=True)
+        config = self._config(enabled=True)
         fake_module = SimpleNamespace(
             screen=MagicMock(return_value=[{"code": "600519", "name": "Kweichow Moutai", "score": 88.5}])
         )
 
-        with patch("api.v1.endpoints.alphasift.importlib.import_module", return_value=fake_module):
-            resp = client.post(
-                "/api/v1/alphasift/screen",
-                json={"market": "cn", "strategy": "dual_low", "max_results": 5},
-            )
+        with patch("api.v1.endpoints.alphasift._import_alphasift", return_value=fake_module):
+            payload = self._screen(config, market="cn", strategy="dual_low", max_results=5)
 
-        self.assertEqual(resp.status_code, 200)
         fake_module.screen.assert_called_once_with(
             "dual_low",
             market="cn",
             max_output=5,
             use_llm=False,
         )
-        payload = resp.json()
         self.assertEqual(payload["candidate_count"], 1)
         self.assertEqual(payload["candidates"][0]["code"], "600519")
 
