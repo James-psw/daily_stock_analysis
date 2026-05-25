@@ -134,14 +134,20 @@ class AlphaSiftOpportunitiesApiTestCase(unittest.TestCase):
         self.assertEqual(payload["candidate_count"], 1)
         run_mock.assert_called_once()
 
-    def test_install_can_run_before_enable(self) -> None:
+    def test_install_rejects_when_disabled_without_side_effects(self) -> None:
         config = self._config(enabled=False)
-        fake_module = SimpleNamespace(screen=MagicMock())
 
-        with patch("api.v1.endpoints.alphasift._import_alphasift", return_value=fake_module):
-            payload = alphasift_endpoint.alphasift_install(config=config)
+        with (
+            patch("api.v1.endpoints.alphasift.subprocess.run") as run_mock,
+            patch("api.v1.endpoints.alphasift._import_alphasift") as import_mock,
+        ):
+            with self.assertRaises(HTTPException) as caught:
+                alphasift_endpoint.alphasift_install(config=config)
 
-        self.assertEqual(payload["already_installed"], True)
+        self.assertEqual(caught.exception.status_code, 403)
+        self.assertEqual(caught.exception.detail["error"], "alphasift_disabled")
+        import_mock.assert_not_called()
+        run_mock.assert_not_called()
 
     def test_install_invokes_pip_when_enabled_and_missing(self) -> None:
         config = self._config(enabled=True)

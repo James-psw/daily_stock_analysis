@@ -37,6 +37,7 @@ def alphasift_status(config: Config = Depends(get_config_dep)) -> Dict[str, Any]
 
 @router.post("/install")
 def alphasift_install(config: Config = Depends(get_config_dep)) -> Dict[str, Any]:
+    _ensure_alphasift_enabled(config)
     return _install_alphasift(config)
 
 
@@ -113,11 +114,7 @@ def alphasift_screen(
     request: AlphaSiftScreenRequest,
     config: Config = Depends(get_config_dep),
 ) -> Dict[str, Any]:
-    if not config.alphasift_enabled:
-        raise HTTPException(
-            status_code=403,
-            detail={"error": "alphasift_disabled", "message": "ALPHASIFT_ENABLED is false."},
-        )
+    _ensure_alphasift_enabled(config)
 
     try:
         alphasift = _import_alphasift()
@@ -146,6 +143,14 @@ def alphasift_screen(
         "candidates": candidates[: request.max_results],
         "candidate_count": len(candidates[: request.max_results]),
     }
+
+
+def _ensure_alphasift_enabled(config: Config) -> None:
+    if not config.alphasift_enabled:
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "alphasift_disabled", "message": "ALPHASIFT_ENABLED is false."},
+        )
 
 
 def _is_alphasift_available() -> bool:
