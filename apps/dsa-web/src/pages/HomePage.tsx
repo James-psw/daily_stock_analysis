@@ -9,7 +9,7 @@ import { systemConfigApi } from '../api/systemConfig';
 import { ApiErrorAlert, ConfirmDialog, Button, EmptyState, InlineAlert } from '../components/common';
 import { DashboardStateBlock } from '../components/dashboard';
 import { StockAutocomplete } from '../components/StockAutocomplete';
-import { HistoryList } from '../components/history';
+import { HistoryList, StockHistoryTrendDrawer } from '../components/history';
 import { ReportMarkdownDrawer } from '../components/report/ReportMarkdownDrawer';
 import { ReportSummary } from '../components/report/ReportSummary';
 import { TaskPanel } from '../components/tasks';
@@ -80,6 +80,14 @@ const HomePage: React.FC = () => {
     hasMore,
     selectedReport,
     isLoadingReport,
+    isHistoryTrendOpen,
+    stockHistoryItems,
+    stockHistoryTotal,
+    stockHistoryHasMore,
+    isLoadingStockHistory,
+    isLoadingMoreStockHistory,
+    stockHistoryError,
+    stockHistoryFilters,
     activeTasks,
     markdownDrawerOpen,
     setQuery,
@@ -101,6 +109,10 @@ const HomePage: React.FC = () => {
     removeTask,
     openMarkdownDrawer,
     closeMarkdownDrawer,
+    openHistoryTrend,
+    closeHistoryTrend,
+    setStockHistoryRange,
+    loadMoreStockHistory,
     selectedIds,
   } = useHomeDashboardState();
 
@@ -817,6 +829,15 @@ const HomePage: React.FC = () => {
                   <Button
                     variant="home-action-ai"
                     size="sm"
+                    disabled={selectedReport.meta.id === undefined || isMarketReviewHistoryReport}
+                    onClick={() => void openHistoryTrend()}
+                  >
+                    <BarChart3 className="h-4 w-4" />
+                    历史趋势
+                  </Button>
+                  <Button
+                    variant="home-action-ai"
+                    size="sm"
                     disabled={selectedReport.meta.id === undefined}
                     onClick={openMarkdownDrawer}
                   >
@@ -854,6 +875,25 @@ const HomePage: React.FC = () => {
           stockCode={selectedReport.meta.stockCode}
           reportLanguage={reportLanguage}
           onClose={closeMarkdownDrawer}
+        />
+      ) : null}
+
+      {isHistoryTrendOpen && selectedReport?.meta.id ? (
+        <StockHistoryTrendDrawer
+          key={`stock-history-${selectedReport.meta.id}`}
+          report={selectedReport}
+          items={stockHistoryItems}
+          total={stockHistoryTotal}
+          hasMore={stockHistoryHasMore}
+          isLoading={isLoadingStockHistory}
+          isLoadingMore={isLoadingMoreStockHistory}
+          error={stockHistoryError}
+          filters={stockHistoryFilters}
+          onClose={closeHistoryTrend}
+          onRangeChange={(range) => void setStockHistoryRange(range)}
+          onLoadMore={() => void loadMoreStockHistory()}
+          onSelectRecord={(recordId) => void selectHistoryItem(recordId)}
+          onRetry={() => void openHistoryTrend()}
         />
       ) : null}
 

@@ -300,9 +300,24 @@ export interface HistoryItem {
   stockCode: string;
   stockName?: string;
   reportType?: ReportType;
+  trendPrediction?: string;
+  analysisSummary?: string;
   sentimentScore?: number;
   operationAdvice?: string;
+  currentPrice?: number;
+  changePct?: number;
+  volumeRatio?: number;
+  turnoverRate?: number;
+  modelUsed?: string;
   createdAt: string;
+}
+
+export type StockHistoryRange = 'all' | '30d' | '90d';
+
+export interface StockHistoryFilters {
+  range: StockHistoryRange;
+  model: string;
+  sort: 'desc' | 'asc';
 }
 
 /** History list response */

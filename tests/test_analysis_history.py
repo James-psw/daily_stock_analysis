@@ -278,6 +278,46 @@ class AnalysisHistoryTestCase(unittest.TestCase):
         self.assertIsNotNone(detail)
         self.assertIsNone(detail.get("model_used"))
 
+    def test_history_list_includes_timeline_summary_fields(self) -> None:
+        """History list items expose the fields needed by the same-stock timeline drawer."""
+        result = self._build_result()
+        result.model_used = "gemini/gemini-2.5-pro"
+        context_snapshot = {
+            "enhanced_context": {
+                "realtime": {
+                    "price": "51.5",
+                    "change_pct": "-4.61%",
+                    "volume_ratio": "1.17",
+                    "turnover_rate": "11.46",
+                },
+            },
+        }
+
+        saved = self.db.save_analysis_history(
+            result=result,
+            query_id="query_timeline_summary",
+            report_type="detailed",
+            news_content="新闻摘要",
+            context_snapshot=context_snapshot,
+            save_snapshot=True,
+        )
+        self.assertEqual(saved, 1)
+
+        service = HistoryService(self.db)
+        payload = service.get_history_list(stock_code="600519.SH", page=1, limit=5)
+
+        self.assertEqual(payload["total"], 1)
+        item = payload["items"][0]
+        self.assertEqual(item["stock_code"], "600519")
+        self.assertEqual(item["trend_prediction"], "看多")
+        self.assertEqual(item["analysis_summary"], "基本面稳健，短期震荡")
+        self.assertEqual(item["operation_advice"], "持有")
+        self.assertEqual(item["model_used"], "gemini/gemini-2.5-pro")
+        self.assertEqual(item["current_price"], 51.5)
+        self.assertEqual(item["change_pct"], -4.61)
+        self.assertEqual(item["volume_ratio"], 1.17)
+        self.assertEqual(item["turnover_rate"], 11.46)
+
     def test_history_detail_preserves_zero_change_pct(self) -> None:
         """change_pct=0.0（平盘）应原样返回，而不是被当成缺失值丢失。
 

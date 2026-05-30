@@ -112,6 +112,53 @@ describe('stockPoolStore', () => {
     expect(state.isLoadingReport).toBe(false);
   });
 
+  it('opens same-stock history trend and loads more records', async () => {
+    const olderItem = {
+      ...historyItem,
+      id: 2,
+      queryId: 'q-2',
+      modelUsed: 'gemini/gemini-2.5-pro',
+    };
+
+    useStockPoolStore.setState({ selectedReport: historyReport });
+    vi.mocked(historyApi.getList)
+      .mockResolvedValueOnce({
+        total: 2,
+        page: 1,
+        limit: 20,
+        items: [historyItem],
+      })
+      .mockResolvedValueOnce({
+        total: 2,
+        page: 2,
+        limit: 20,
+        items: [olderItem],
+      });
+
+    await useStockPoolStore.getState().openHistoryTrend();
+
+    let state = useStockPoolStore.getState();
+    expect(state.isHistoryTrendOpen).toBe(true);
+    expect(state.stockHistoryItems).toEqual([historyItem]);
+    expect(state.stockHistoryHasMore).toBe(true);
+    expect(historyApi.getList).toHaveBeenLastCalledWith({
+      stockCode: '600519',
+      page: 1,
+      limit: 20,
+    });
+
+    await useStockPoolStore.getState().loadMoreStockHistory();
+
+    state = useStockPoolStore.getState();
+    expect(state.stockHistoryItems.map((item) => item.id)).toEqual([1, 2]);
+    expect(state.stockHistoryHasMore).toBe(false);
+    expect(historyApi.getList).toHaveBeenLastCalledWith({
+      stockCode: '600519',
+      page: 2,
+      limit: 20,
+    });
+  });
+
   it('deletes selected history and clears the selected report when nothing remains', async () => {
     useStockPoolStore.setState({
       historyItems: [historyItem],
