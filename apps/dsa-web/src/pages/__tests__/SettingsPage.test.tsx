@@ -914,6 +914,79 @@ describe('SettingsPage', () => {
     expect(refreshAfterExternalSave).not.toHaveBeenCalledWith(['ALPHASIFT_ENABLED']);
   });
 
+  it('passes LLM channel support keys to the channel editor without rendering them as generic fields', async () => {
+    useSystemConfigMock.mockReturnValue(buildSystemConfigState({
+      activeCategory: 'ai_model',
+      itemsByCategory: {
+        ...buildSystemConfigState().itemsByCategory,
+        ai_model: [
+          {
+            key: 'LLM_CHANNELS',
+            value: 'my_proxy',
+            rawValueExists: true,
+            isMasked: false,
+            schema: {
+              key: 'LLM_CHANNELS',
+              category: 'ai_model',
+              dataType: 'string',
+              uiControl: 'textarea',
+              isSensitive: false,
+              isRequired: false,
+              isEditable: true,
+              options: [],
+              validation: {},
+              displayOrder: 1,
+            },
+          },
+          {
+            key: 'LLM_MY_PROXY_API_KEY',
+            value: 'sk-test',
+            rawValueExists: true,
+            isMasked: false,
+            schema: {
+              key: 'LLM_MY_PROXY_API_KEY',
+              category: 'ai_model',
+              dataType: 'string',
+              uiControl: 'password',
+              isSensitive: true,
+              isRequired: false,
+              isEditable: true,
+              options: [],
+              validation: {},
+              displayOrder: 9000,
+            },
+          },
+          {
+            key: 'LLM_MY_PROXY_MODELS',
+            value: 'gpt-5.5',
+            rawValueExists: true,
+            isMasked: false,
+            schema: {
+              key: 'LLM_MY_PROXY_MODELS',
+              category: 'ai_model',
+              dataType: 'string',
+              uiControl: 'text',
+              isSensitive: false,
+              isRequired: false,
+              isEditable: true,
+              options: [],
+              validation: {},
+              displayOrder: 9000,
+            },
+          },
+        ],
+      },
+    }));
+
+    render(<SettingsPage />);
+
+    expect(await screen.findByTestId('llm-channel-editor-items')).toHaveTextContent(
+      'LLM_CHANNELS,LLM_MY_PROXY_API_KEY,LLM_MY_PROXY_MODELS',
+    );
+    expect(screen.queryByTestId('settings-field-LLM_MY_PROXY_API_KEY')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('settings-field-LLM_MY_PROXY_MODELS')).not.toBeInTheDocument();
+  });
+
   it('renders notification test panel before notification fields', () => {
     useSystemConfigMock.mockReturnValue(buildSystemConfigState({ activeCategory: 'notification' }));
 

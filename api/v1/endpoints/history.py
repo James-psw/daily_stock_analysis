@@ -28,6 +28,7 @@ from api.v1.schemas.history import (
     ReportStrategy,
     ReportDetails,
     MarkdownReportResponse,
+    RunDiagnosticSummaryResponse,
 )
 from api.v1.schemas.common import ErrorResponse
 from src.storage import DatabaseManager
@@ -44,6 +45,10 @@ from src.utils.data_processing import (
     extract_fundamental_detail_fields,
     extract_board_detail_fields,
     extract_realtime_detail_fields,
+)
+from src.analysis_context_pack_overview import (
+    extract_analysis_context_pack_overview,
+    sanitize_context_snapshot_for_api,
 )
 
 logger = logging.getLogger(__name__)
@@ -225,6 +230,8 @@ def get_history_detail(
         # 注意：使用 `is None` 而非 `or`，避免把 0.0（平盘）误判为缺失值；
         # 同时不混用 `change_60d`（60 日累计涨跌幅）作为日内 change_pct 的兜底。
         context_snapshot = result.get("context_snapshot")
+        analysis_context_pack_overview = extract_analysis_context_pack_overview(context_snapshot)
+        api_context_snapshot = sanitize_context_snapshot_for_api(context_snapshot)
         realtime_fields = extract_realtime_detail_fields(context_snapshot)
         current_price = realtime_fields.get("current_price")
         change_pct = realtime_fields.get("change_pct")
@@ -302,7 +309,8 @@ def get_history_detail(
         details = ReportDetails(
             news_content=result.get("news_content"),
             raw_result=result.get("raw_result"),
-            context_snapshot=result.get("context_snapshot"),
+            context_snapshot=api_context_snapshot,
+            analysis_context_pack_overview=analysis_context_pack_overview,
             financial_report=extracted_fundamental.get("financial_report"),
             dividend_metrics=extracted_fundamental.get("dividend_metrics"),
             belong_boards=extracted_boards.get("belong_boards"),
@@ -326,6 +334,49 @@ def get_history_detail(
                 "error": "internal_error",
                 "message": f"查询历史详情失败: {str(e)}"
             }
+        )
+
+
+@router.get(
+    "/{record_id}/diagnostics",
+    response_model=RunDiagnosticSummaryResponse,
+    responses={
+        200: {"description": "运行诊断摘要"},
+        404: {"description": "报告不存在", "model": ErrorResponse},
+        500: {"description": "服务器错误", "model": ErrorResponse},
+    },
+    summary="获取历史报告运行诊断摘要",
+    description="根据分析历史记录 ID 或 query_id 获取用户可读诊断摘要和脱敏复制文本。",
+)
+def get_history_diagnostics(
+    record_id: str,
+    db_manager: DatabaseManager = Depends(get_database_manager),
+) -> RunDiagnosticSummaryResponse:
+    """
+    获取历史报告运行诊断摘要。
+    """
+    try:
+        service = HistoryService(db_manager)
+        summary = service.resolve_and_get_diagnostics(record_id)
+        if summary is None:
+            raise HTTPException(
+                status_code=404,
+                detail={
+                    "error": "not_found",
+                    "message": f"未找到 id/query_id={record_id} 的分析记录",
+                },
+            )
+        return RunDiagnosticSummaryResponse.model_validate(summary)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"查询运行诊断摘要失败: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "error": "internal_error",
+                "message": f"查询运行诊断摘要失败: {str(e)}",
+            },
         )
 
 
