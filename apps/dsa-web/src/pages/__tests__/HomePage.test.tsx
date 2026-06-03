@@ -359,12 +359,51 @@ describe('HomePage', () => {
         '',
         '> 市场情绪修复',
         '',
+        '## 指数概览',
+        '',
         '| 指数 | 表现 |',
         '| --- | --- |',
         '| 上证指数 | 震荡走强 |',
         '',
+        '## 风险提示',
+        '',
         '- 资金回流核心资产',
       ].join('\n'),
+      marketReviewPayload: {
+        kind: 'market_review',
+        region: 'cn',
+        title: 'A股市场复盘',
+        breadth: {
+          upCount: 3200,
+          downCount: 1700,
+          limitUpCount: 60,
+          limitDownCount: 8,
+          totalAmount: 9800,
+          turnoverUnit: '亿',
+        },
+        indices: [
+          {
+            code: '000001',
+            name: '上证指数',
+            current: 3150.2,
+            changePct: 0.62,
+            high: 3168.4,
+            low: 3120.8,
+          },
+        ],
+        sections: [
+          {
+            key: 'index_overview',
+            title: '指数概览',
+            markdown: '| 指数 | 表现 |\n| --- | --- |\n| 上证指数 | 震荡走强 |',
+          },
+          {
+            key: 'risk',
+            title: '风险提示',
+            markdown: '- 资金回流核心资产',
+          },
+        ],
+      },
     });
 
     render(
@@ -380,9 +419,13 @@ describe('HomePage', () => {
     expect(dashboardScroll).toContainElement(marketReviewReport);
     expect(marketReviewReport.className).not.toContain('max-h-64');
     expect(marketReviewReport.className).not.toContain('overflow-y-auto');
-    expect(screen.getByRole('heading', { name: 'A股市场复盘' })).toBeInTheDocument();
-    expect(screen.getByText('市场情绪修复')).toBeInTheDocument();
-    expect(screen.getByRole('table')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Structured Market Data' })).toBeInTheDocument();
+    expect(screen.getByText('3200')).toBeInTheDocument();
+    expect(screen.getByText('3150.2')).toBeInTheDocument();
+    expect(marketReviewReport.querySelector('h2, h3')?.textContent).not.toBe('A股市场复盘');
+    expect(screen.getByRole('heading', { name: '指数概览' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '风险提示' })).toBeInTheDocument();
+    expect(screen.getAllByRole('table').length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText('# A股市场复盘')).not.toBeInTheDocument();
     expect(await screen.findByText('开始分析')).toBeInTheDocument();
   });
@@ -726,7 +769,11 @@ describe('HomePage', () => {
     vi.mocked(historyApi.getMarkdown).mockResolvedValue([
       '# 大盘复盘详情',
       '',
+      '## 市场情绪与赚钱效应',
+      '',
       '**赚钱效应** 改善',
+      '',
+      '## 行业/主题轮动',
       '',
       '| 方向 | 状态 |',
       '| --- | --- |',
@@ -740,7 +787,9 @@ describe('HomePage', () => {
     );
 
     await screen.findByText('大盘复盘摘要');
-    expect(await screen.findByRole('heading', { name: '大盘复盘详情' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: '大盘复盘详情' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: '市场情绪与赚钱效应' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '行业/主题轮动' })).toBeInTheDocument();
     expect(screen.getByText('赚钱效应')).toBeInTheDocument();
     expect(screen.getByRole('table')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '重新分析' })).not.toBeInTheDocument();

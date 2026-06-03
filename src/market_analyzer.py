@@ -11,6 +11,7 @@
 """
 
 import logging
+import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -101,6 +102,7 @@ class MarketLightReviewResult:
     overview: MarketOverview
     report: str
     market_light_snapshot: Dict[str, Any]
+    structured_payload: Dict[str, Any] = field(default_factory=dict)
 
 
 class MarketAnalyzer:
@@ -474,21 +476,109 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         if not self.analyzer or not self.analyzer.is_available():
             logger.warning("[大盘] AI分析器未配置或不可用，使用模板生成报告")
             return self._generate_template_review(overview, news)
-        
+
         # 构建 Prompt
         prompt = self._build_review_prompt(overview, news)
-        
+
         logger.info("[大盘] 调用大模型生成复盘报告...")
-        # Use the public generate_text() entry point — never access private analyzer attributes.
+        # Use the public generate_text() entry point - never access private analyzer attributes.
         review = self.analyzer.generate_text(prompt, max_tokens=8192, temperature=0.7)
 
         if review:
             logger.info("[大盘] 复盘报告生成成功，长度: %d 字符", len(review))
             # Inject structured data tables into LLM prose sections
             return self._inject_data_into_review(review, overview, news)
-        else:
-            logger.warning("[大盘] 大模型返回为空，使用模板报告")
-            return self._generate_template_review(overview, news)
+
+        logger.warning("[大盘] 大模型返回为空，使用模板报告")
+        return self._generate_template_review(overview, news)
+
+    def build_market_review_payload(
+        self,
+        overview: MarketOverview,
+        news: List,
+        report: str,
+        market_light_snapshot: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Build the structured market-review contract consumed by API, Web, and notifications."""
+        language = self._get_review_language()
+        sections = self._split_report_sections(report)
+        title = self._extract_report_title(report) or self._get_review_title(overview.date).lstrip("# ").strip()
+        light = market_light_snapshot or self.build_market_light_snapshot(overview)
+        return {
+            "version": 1,
+            "kind": "market_review",
+            "region": self.region,
+            "language": language,
+            "title": title,
+            "generated_at": datetime.now().isoformat(),
+            "date": overview.date,
+            "market_scope": self._get_market_scope_name(language),
+            "market_light": light,
+            "breadth": {
+                "up_count": overview.up_count,
+                "down_count": overview.down_count,
+                "flat_count": overview.flat_count,
+                "limit_up_count": overview.limit_up_count,
+                "limit_down_count": overview.limit_down_count,
+                "total_amount": overview.total_amount,
+                "turnover_unit": self._get_turnover_unit_label(),
+            },
+            "indices": [idx.to_dict() for idx in overview.indices],
+            "sectors": {
+                "top": list(overview.top_sectors or []),
+                "bottom": list(overview.bottom_sectors or []),
+            },
+            "news": [self._normalize_news_item(item) for item in (news or [])[:8]],
+            "sections": sections,
+            "markdown_report": report,
+        }
+
+    @staticmethod
+    def _extract_report_title(report: str) -> str:
+        for line in (report or "").splitlines():
+            stripped = line.strip()
+            if stripped.startswith("#"):
+                return stripped.lstrip("#").strip()
+        return ""
+
+    @classmethod
+    def _split_report_sections(cls, report: str) -> List[Dict[str, str]]:
+        text = (report or "").strip()
+        if not text:
+            return []
+        matches = list(re.finditer(r"^(#{2,3})\s+(.+?)\s*$", text, flags=re.MULTILINE))
+        if not matches:
+            return [{"key": "full_review", "title": "Review", "markdown": text}]
+
+        sections: List[Dict[str, str]] = []
+        intro = text[: matches[0].start()].strip()
+        if intro:
+            sections.append({"key": "overview", "title": "Overview", "markdown": intro})
+
+        for index, match in enumerate(matches):
+            start = match.end()
+            end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+            title = match.group(2).strip()
+            markdown = text[start:end].strip()
+            if not markdown:
+                continue
+            key = re.sub(r"[^0-9a-zA-Z\u4e00-\u9fff]+", "_", title).strip("_").lower()
+            sections.append({
+                "key": key or f"section_{index + 1}",
+                "title": title,
+                "markdown": markdown,
+            })
+        return sections
+
+    @classmethod
+    def _normalize_news_item(cls, item: Any) -> Dict[str, str]:
+        return {
+            "title": cls._compact_news_text(cls._get_news_field(item, "title"), limit=120),
+            "snippet": cls._compact_news_text(cls._get_news_field(item, "snippet"), limit=260),
+            "source": cls._compact_news_text(cls._get_news_field(item, "source"), limit=80),
+            "published_date": cls._compact_news_text(cls._get_news_field(item, "published_date"), limit=40),
+            "url": cls._compact_news_text(cls._get_news_field(item, "url"), limit=240),
+        }
     
     def _inject_data_into_review(
         self,
@@ -1247,6 +1337,12 @@ Market conditions can change quickly. The data above is for reference only and d
         # 3. 生成复盘报告
         report = self.generate_market_review(overview, news)
         snapshot = self.build_market_light_snapshot(overview)
+        structured_payload = self.build_market_review_payload(
+            overview,
+            news,
+            report,
+            snapshot,
+        )
 
         logger.info("========== 大盘复盘分析完成 ==========")
 
@@ -1254,6 +1350,7 @@ Market conditions can change quickly. The data above is for reference only and d
             overview=overview,
             report=report,
             market_light_snapshot=snapshot,
+            structured_payload=structured_payload,
         )
 
     def run_daily_review(self) -> str:

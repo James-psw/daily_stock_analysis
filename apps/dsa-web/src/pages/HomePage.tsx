@@ -19,6 +19,7 @@ import { useDashboardLifecycle, useHomeDashboardState } from '../hooks';
 import { useWatchlist } from '../hooks/useWatchlist';
 import type { SetupStatusResponse } from '../types/systemConfig';
 import { getReportText, normalizeReportLanguage } from '../utils/reportLanguage';
+import type { MarketReviewPayload } from '../types/analysis';
 
 type MarketReviewNotice = {
   variant: 'success' | 'warning' | 'danger';
@@ -33,6 +34,7 @@ const HomePage: React.FC = () => {
   const [marketReviewNotice, setMarketReviewNotice] = useState<MarketReviewNotice>(null);
   const [marketReviewError, setMarketReviewError] = useState<ParsedApiError | null>(null);
   const [marketReviewReport, setMarketReviewReport] = useState<string | null>(null);
+  const [marketReviewPayload, setMarketReviewPayload] = useState<MarketReviewPayload | null>(null);
   const [analysisSkills, setAnalysisSkills] = useState<SkillInfo[]>([]);
   const [selectedStrategyId, setSelectedStrategyId] = useState('');
   const [strategyMenuOpen, setStrategyMenuOpen] = useState(false);
@@ -391,6 +393,7 @@ const HomePage: React.FC = () => {
         if (attempts >= maxAttempts) {
           stopMarketReviewPolling();
           setMarketReviewReport(null);
+          setMarketReviewPayload(null);
           setMarketReviewNotice({
             variant: 'danger',
             title: '大盘复盘已超时',
@@ -406,6 +409,7 @@ const HomePage: React.FC = () => {
           const status = await analysisApi.getStatus(taskId);
           if (status.status === 'pending' || status.status === 'processing') {
             setMarketReviewReport(null);
+            setMarketReviewPayload(null);
             const progress = typeof status.progress === 'number'
               ? `${status.progress}%`
               : '进行中';
@@ -423,6 +427,7 @@ const HomePage: React.FC = () => {
               ? status.marketReviewReport
               : '';
             setMarketReviewReport(marketReviewText ? marketReviewText.trim() : null);
+            setMarketReviewPayload(status.marketReviewPayload ?? null);
             setMarketReviewNotice({
               variant: 'success',
               title: '大盘复盘已完成',
@@ -436,6 +441,7 @@ const HomePage: React.FC = () => {
           if (status.status === 'failed') {
             stopMarketReviewPolling();
             setMarketReviewReport(null);
+            setMarketReviewPayload(null);
             setMarketReviewError(
               getParsedApiError({
                 response: {
@@ -454,6 +460,7 @@ const HomePage: React.FC = () => {
 
           stopMarketReviewPolling();
           setMarketReviewReport(null);
+          setMarketReviewPayload(null);
           setMarketReviewNotice({
             variant: 'danger',
             title: '大盘复盘状态异常',
@@ -466,6 +473,7 @@ const HomePage: React.FC = () => {
           if (attempts >= maxAttempts) {
             stopMarketReviewPolling();
             setMarketReviewReport(null);
+            setMarketReviewPayload(null);
             setMarketReviewError(parsed);
             setMarketReviewNotice(null);
             scrollMarketReviewFeedbackIntoView();
@@ -495,6 +503,7 @@ const HomePage: React.FC = () => {
     setMarketReviewNotice(null);
     setMarketReviewError(null);
     setMarketReviewReport(null);
+    setMarketReviewPayload(null);
     scrollMarketReviewFeedbackIntoView();
     try {
       const result = await analysisApi.triggerMarketReview({ sendNotification: notify });
@@ -764,6 +773,7 @@ const HomePage: React.FC = () => {
             {marketReviewReport ? (
               <MarketReviewReportView
                 content={marketReviewReport}
+                payload={marketReviewPayload}
                 reportLanguage="zh"
                 className="mb-3"
               />

@@ -1,8 +1,13 @@
 import type React from 'react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BarChart3, Clipboard, FileText, Gauge, Layers, ShieldAlert } from 'lucide-react';
+import { BarChart3, Clipboard, FileText, Gauge, Layers, ShieldAlert, TrendingUp, WalletCards } from 'lucide-react';
 import { historyApi } from '../../api/history';
-import type { AnalysisReport, ReportLanguage } from '../../types/analysis';
+import type {
+  AnalysisReport,
+  MarketReviewPayload,
+  MarketReviewPayloadSection,
+  ReportLanguage,
+} from '../../types/analysis';
 import { markdownToPlainText } from '../../utils/markdown';
 import { getReportText, normalizeReportLanguage } from '../../utils/reportLanguage';
 import { Card } from '../common';
@@ -13,6 +18,7 @@ interface MarketReviewReportViewProps {
   report?: AnalysisReport;
   recordId?: number;
   content?: string;
+  payload?: MarketReviewPayload | null;
   reportLanguage?: ReportLanguage;
   className?: string;
 }
@@ -25,6 +31,130 @@ type LoadedMarkdown = {
 type LoadError = {
   recordId: number;
   message: string;
+};
+type MarketReviewSection = {
+  id: string;
+  title: string;
+  content: string;
+  icon: typeof FileText;
+};
+
+const isMarketReviewPayload = (value: unknown): value is MarketReviewPayload =>
+  Boolean(value && typeof value === 'object');
+
+const TOP_HEADING_PATTERN = /^\s*#\s+(.+?)\s*(?:\n+|$)/;
+const SECTION_HEADING_PATTERN = /^(#{2,3})\s+(.+?)\s*$/gm;
+
+const normalizeHeading = (value: string): string =>
+  value.trim().replace(/\s+/g, ' ').toLowerCase();
+
+const stripTopHeading = (markdown: string, title?: string): string => {
+  const match = markdown.match(TOP_HEADING_PATTERN);
+  if (!match) {
+    return markdown.trim();
+  }
+
+  const heading = normalizeHeading(match[1]);
+  const reportTitle = normalizeHeading(title || '');
+  const genericTitles = new Set([
+    'market review',
+    '大盘复盘',
+    '大盘复盘详情',
+    'a股市场复盘',
+    'a 股市场复盘',
+  ]);
+
+  if (heading === reportTitle || genericTitles.has(heading)) {
+    return markdown.slice(match[0].length).trim();
+  }
+
+  return markdown.trim();
+};
+
+const getSectionIcon = (title: string): typeof FileText => {
+  const normalized = normalizeHeading(title);
+  if (/指数|index|overview|大盘/.test(normalized)) {
+    return BarChart3;
+  }
+  if (/情绪|赚钱|sentiment|breadth|temperature/.test(normalized)) {
+    return Gauge;
+  }
+  if (/行业|板块|主题|轮动|sector|theme|rotation/.test(normalized)) {
+    return TrendingUp;
+  }
+  if (/资金|成交|量能|flow|turnover|volume|capital/.test(normalized)) {
+    return WalletCards;
+  }
+  if (/风险|机会|观察|risk|watch|next/.test(normalized)) {
+    return ShieldAlert;
+  }
+  return FileText;
+};
+
+const splitMarketReviewSections = (markdown: string): MarketReviewSection[] => {
+  const matches = Array.from(markdown.matchAll(SECTION_HEADING_PATTERN));
+  if (matches.length === 0) {
+    return [{
+      id: 'full-review',
+      title: '复盘正文',
+      content: markdown,
+      icon: FileText,
+    }];
+  }
+
+  const intro = markdown.slice(0, matches[0].index).trim();
+  const sections: MarketReviewSection[] = intro
+    ? [{
+        id: 'overview',
+        title: '复盘概览',
+        content: intro,
+        icon: FileText,
+      }]
+    : [];
+
+  matches.forEach((match, index) => {
+    const start = (match.index ?? 0) + match[0].length;
+    const end = index + 1 < matches.length ? matches[index + 1].index ?? markdown.length : markdown.length;
+    const title = match[2].trim();
+    const content = markdown.slice(start, end).trim();
+    if (!content) {
+      return;
+    }
+    sections.push({
+      id: `${index}-${normalizeHeading(title).replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-').replace(/^-|-$/g, '') || 'section'}`,
+      title,
+      content,
+      icon: getSectionIcon(title),
+    });
+  });
+
+  return sections;
+};
+
+const getPayloadSections = (payload?: MarketReviewPayload | null): MarketReviewSection[] => {
+  if (!payload) {
+    return [];
+  }
+
+  if (payload.markets) {
+    return Object.entries(payload.markets).flatMap(([region, marketPayload]) => {
+      const marketTitle = marketPayload.title || region.toUpperCase();
+      return getPayloadSections(marketPayload).map((section) => ({
+        ...section,
+        id: `${region}-${section.id}`,
+        title: `${marketTitle} / ${section.title}`,
+      }));
+    });
+  }
+
+  return (payload.sections || [])
+    .filter((section: MarketReviewPayloadSection) => section.markdown?.trim())
+    .map((section, index) => ({
+      id: `${section.key || index}-${normalizeHeading(section.title).replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-') || 'section'}`,
+      title: section.title || 'Review',
+      content: section.markdown,
+      icon: getSectionIcon(section.title || ''),
+    }));
 };
 
 const MARKET_REVIEW_TEXT: Record<ReportLanguage, {
@@ -60,6 +190,7 @@ export const MarketReviewReportView: React.FC<MarketReviewReportViewProps> = ({
   report,
   recordId,
   content: providedContent,
+  payload: providedPayload,
   reportLanguage = 'zh',
   className = '',
 }) => {
@@ -71,13 +202,33 @@ export const MarketReviewReportView: React.FC<MarketReviewReportViewProps> = ({
   const [copiedType, setCopiedType] = useState<CopyType | null>(null);
   const summary = report?.summary;
   const meta = report?.meta;
+  const contextPayload = report?.details?.contextSnapshot?.marketReviewPayload;
+  const marketReviewPayload = providedPayload ?? (isMarketReviewPayload(contextPayload) ? contextPayload : null);
   const loadedContent = loadedMarkdown && loadedMarkdown.recordId === recordId ? loadedMarkdown.content : '';
-  const content = providedContent ?? loadedContent;
+  const content = providedContent ?? marketReviewPayload?.markdownReport ?? loadedContent;
   const error = loadError && loadError.recordId === recordId ? loadError.message : null;
-  const isLoading = Boolean(recordId && !providedContent && loadedMarkdown?.recordId !== recordId && !error);
+  const hasStructuredContent = Boolean(marketReviewPayload?.sections?.length || marketReviewPayload?.markets);
+  const isLoading = Boolean(recordId && !providedContent && !hasStructuredContent && loadedMarkdown?.recordId !== recordId && !error);
+  const displayTitle = marketReviewPayload?.rootTitle || marketReviewPayload?.title || meta?.stockName || 'Market Review';
+  const structuredContent = useMemo(
+    () => stripTopHeading(content, displayTitle),
+    [content, displayTitle],
+  );
+  const sections = useMemo(
+    () => {
+      const payloadSections = getPayloadSections(marketReviewPayload);
+      return payloadSections.length > 0 ? payloadSections : splitMarketReviewSections(structuredContent);
+    },
+    [marketReviewPayload, structuredContent],
+  );
+  const primaryPayload = marketReviewPayload?.markets
+    ? Object.values(marketReviewPayload.markets)[0]
+    : marketReviewPayload;
+  const indices = primaryPayload?.indices || [];
+  const breadth = primaryPayload?.breadth;
 
   useEffect(() => {
-    if (!recordId || providedContent) {
+    if (!recordId || providedContent || hasStructuredContent) {
       return undefined;
     }
 
@@ -102,7 +253,7 @@ export const MarketReviewReportView: React.FC<MarketReviewReportViewProps> = ({
     return () => {
       isMounted = false;
     };
-  }, [providedContent, recordId, text.loadReportFailed]);
+  }, [hasStructuredContent, providedContent, recordId, text.loadReportFailed]);
 
   const handleCopy = useCallback(async (type: CopyType) => {
     if (!content) {
@@ -153,7 +304,7 @@ export const MarketReviewReportView: React.FC<MarketReviewReportViewProps> = ({
               <span>MARKET REVIEW</span>
             </div>
             <h2 className="text-[26px] font-bold leading-tight text-foreground sm:text-[30px]">
-              {meta?.stockName || '大盘复盘'}
+              {displayTitle}
             </h2>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-text">
               {meta?.stockCode ? (
@@ -224,27 +375,95 @@ export const MarketReviewReportView: React.FC<MarketReviewReportViewProps> = ({
         </div>
       ) : null}
 
-      <Card variant="bordered" padding="md" className="home-panel-card text-left">
-        {isLoading ? (
+      {indices.length > 0 || breadth ? (
+        <Card variant="bordered" padding="md" className="home-panel-card text-left">
+          <div className="mb-3 flex items-center gap-2">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <BarChart3 className="h-4 w-4" aria-hidden="true" />
+            </span>
+            <h3 className="text-base font-semibold text-foreground">Structured Market Data</h3>
+          </div>
+          {breadth ? (
+            <div className="mb-4 grid grid-cols-2 gap-2 text-sm md:grid-cols-4">
+              <div className="rounded-lg border border-subtle p-3">
+                <p className="label-uppercase">Advancers</p>
+                <p className="mt-1 font-semibold text-foreground">{breadth.upCount ?? '-'}</p>
+              </div>
+              <div className="rounded-lg border border-subtle p-3">
+                <p className="label-uppercase">Decliners</p>
+                <p className="mt-1 font-semibold text-foreground">{breadth.downCount ?? '-'}</p>
+              </div>
+              <div className="rounded-lg border border-subtle p-3">
+                <p className="label-uppercase">Limit Up/Down</p>
+                <p className="mt-1 font-semibold text-foreground">{breadth.limitUpCount ?? '-'} / {breadth.limitDownCount ?? '-'}</p>
+              </div>
+              <div className="rounded-lg border border-subtle p-3">
+                <p className="label-uppercase">Turnover</p>
+                <p className="mt-1 font-semibold text-foreground">{breadth.totalAmount ?? '-'} {breadth.turnoverUnit || ''}</p>
+              </div>
+            </div>
+          ) : null}
+          {indices.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="text-left text-xs uppercase text-muted-text">
+                  <tr>
+                    <th className="px-2 py-2">Index</th>
+                    <th className="px-2 py-2">Last</th>
+                    <th className="px-2 py-2">Change</th>
+                    <th className="px-2 py-2">High/Low</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-subtle">
+                  {indices.map((index) => (
+                    <tr key={index.code || index.name}>
+                      <td className="px-2 py-2 font-medium text-foreground">{index.name}</td>
+                      <td className="px-2 py-2 text-secondary-text">{index.current ?? '-'}</td>
+                      <td className="px-2 py-2 text-secondary-text">{index.changePct !== undefined ? `${index.changePct}%` : '-'}</td>
+                      <td className="px-2 py-2 text-secondary-text">{index.high ?? '-'} / {index.low ?? '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {isLoading ? (
+        <Card variant="bordered" padding="md" className="home-panel-card text-left">
           <div className="flex h-64 flex-col items-center justify-center">
             <div className="home-spinner h-10 w-10 animate-spin border-[3px]" />
             <p className="mt-4 text-sm text-secondary-text">{text.loadingReport}</p>
           </div>
-        ) : error ? (
+        </Card>
+      ) : error ? (
+        <Card variant="bordered" padding="md" className="home-panel-card text-left">
           <div className="flex h-64 flex-col items-center justify-center">
             <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-danger/10">
               <ShieldAlert className="h-6 w-6 text-danger" aria-hidden="true" />
             </div>
             <p className="text-sm text-danger">{error}</p>
           </div>
-        ) : (
-          <ReportMarkdownBody
-            content={content}
-            testId="market-review-report"
-            className="market-review-markdown"
-          />
-        )}
-      </Card>
+        </Card>
+      ) : (
+        <div data-testid="market-review-report" className="space-y-4">
+          {sections.map(({ id, title, content: sectionContent, icon: Icon }) => (
+            <Card key={id} variant="bordered" padding="md" className="home-panel-card text-left">
+              <div className="mb-3 flex items-center gap-2">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Icon className="h-4 w-4" aria-hidden="true" />
+                </span>
+                <h3 className="text-base font-semibold text-foreground">{title}</h3>
+              </div>
+              <ReportMarkdownBody
+                content={sectionContent}
+                className="market-review-markdown"
+              />
+            </Card>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

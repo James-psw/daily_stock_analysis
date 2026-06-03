@@ -331,6 +331,12 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
                             "data_quality": "ok",
                         }
                     },
+                    market_review_payload={
+                        "version": 1,
+                        "kind": "market_review",
+                        "region": "cn",
+                        "sections": [{"title": "今日大盘", "markdown": "复盘正文"}],
+                    },
                 )
 
                 self.assertEqual(saved, 1)
@@ -346,6 +352,7 @@ class MarketReviewLocalizationTestCase(unittest.TestCase):
                     self.assertEqual(row.news_content, "## 今日大盘\n\n复盘正文")
                     self.assertIn("# 🎯 大盘复盘", row.raw_result)
                     self.assertIn('"market_light_snapshots"', row.context_snapshot)
+                    self.assertIn('"market_review_payload"', row.context_snapshot)
                     self.assertIn('"trade_date": "2026-03-06"', row.context_snapshot)
             finally:
                 DatabaseManager.reset_instance()
