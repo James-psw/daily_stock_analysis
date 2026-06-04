@@ -136,7 +136,7 @@ if ! "${packaged_entry}" --help >/tmp/alphasift-packaged-help.log 2>&1; then
   exit 1
 fi
 
-if ! "${PYTHON_BIN}" -S - <<'PY' "${packaged_root}"
+if "${PYTHON_BIN}" -S - <<'PY' "${packaged_root}"
 import pathlib
 import sys
 import zipfile
