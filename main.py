@@ -49,7 +49,7 @@ import logging
 import sys
 import time
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import date, datetime, timezone, timedelta
 
 from data_provider.base import canonical_stock_code
 from src.webui_frontend import prepare_webui_frontend_assets
@@ -493,8 +493,9 @@ def _prime_daily_market_context(
     region: str,
     no_market_review: bool,
     allow_generate: bool,
+    target_date: Optional[date] = None,
 ) -> str:
-    """Load/reuse today's market context for the run, avoiding unbounded background generation."""
+    """Load/reuse the run's market context, avoiding unbounded background generation."""
     if no_market_review or not region:
         return ""
 
@@ -514,6 +515,7 @@ def _prime_daily_market_context(
         force_refresh=False,
         allow_generate=allow_generate,
         persist_market_review_history=False,
+        target_date=target_date,
     )
     if context is None:
         return ""
@@ -533,6 +535,18 @@ def _can_reuse_market_context_for_review(summary: str, region: str) -> bool:
         return False
     parts = {item.strip() for item in normalized.split(",") if item.strip()}
     return len(parts) <= 1
+
+
+def _resolve_daily_market_context_target_date(
+    region: str,
+    current_time: datetime,
+) -> date:
+    normalized_region = str(region or "cn").strip().lower()
+    market = normalized_region if normalized_region in {"cn", "hk", "us"} else "cn"
+
+    from src.core.trading_calendar import get_effective_trading_date
+
+    return get_effective_trading_date(market, current_time=current_time)
 
 
 def run_full_analysis(
@@ -599,6 +613,13 @@ def run_full_analysis(
             and not args.no_market_review
             and (market_review_region or '') != ''
         )
+        analysis_reference_time = datetime.now(timezone.utc)
+        daily_market_context_target_date = None
+        if should_generate_market_context:
+            daily_market_context_target_date = _resolve_daily_market_context_target_date(
+                market_review_region,
+                analysis_reference_time,
+            )
         market_report = ""
         market_context_summary = ""
         pipeline = StockAnalysisPipeline(
@@ -616,6 +637,7 @@ def run_full_analysis(
                 region=market_review_region,
                 no_market_review=args.no_market_review,
                 allow_generate=should_generate_market_context,
+                target_date=daily_market_context_target_date,
             )
 
         # 1. 运行个股分析
@@ -623,7 +645,8 @@ def run_full_analysis(
             stock_codes=stock_codes,
             dry_run=args.dry_run,
             send_notification=not args.no_notify,
-            merge_notification=merge_notification
+            merge_notification=merge_notification,
+            current_time=analysis_reference_time,
         )
 
         # Issue #128: 分析间隔 - 在个股分析和大盘分析之间添加延迟
@@ -655,6 +678,7 @@ def run_full_analysis(
                     region=market_review_region,
                     no_market_review=args.no_market_review,
                     allow_generate=False,
+                    target_date=daily_market_context_target_date,
                 )
                 can_reuse_market_context = _can_reuse_market_context_for_review(
                     market_context_summary,
@@ -682,6 +706,7 @@ def run_full_analysis(
                     region=market_review_region,
                     no_market_review=args.no_market_review,
                     allow_generate=False,
+                    target_date=daily_market_context_target_date,
                 )
                 can_reuse_market_context = _can_reuse_market_context_for_review(
                     market_context_summary,

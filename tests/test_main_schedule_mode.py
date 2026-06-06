@@ -5,7 +5,7 @@ import logging
 import os
 import tempfile
 import unittest
-from datetime import datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -557,6 +557,8 @@ class MainScheduleModeTestCase(unittest.TestCase):
 
     def test_run_full_analysis_primes_daily_market_context_before_stock_analysis(self) -> None:
         args = self._make_args()
+        target_date = date(2026, 3, 26)
+        reference_times = []
         config = self._make_config(
             trading_day_check_enabled=False,
             market_review_enabled=True,
@@ -573,8 +575,14 @@ class MainScheduleModeTestCase(unittest.TestCase):
             pipeline_kwargs.update(kwargs)
             return pipeline
 
+        def resolve_target_date(region, current_time):
+            self.assertEqual(region, "cn")
+            reference_times.append(current_time)
+            return target_date
+
         with patch.object(main, "_refresh_stock_index_cache_for_analysis") as refresh, \
              patch("main._compute_trading_day_filter", return_value=([], "cn", False)), \
+             patch("main._resolve_daily_market_context_target_date", side_effect=resolve_target_date), \
              patch("src.core.pipeline.StockAnalysisPipeline", side_effect=build_pipeline), \
              patch("main._prime_daily_market_context", return_value="大盘退潮，高风险，建议观望，仓位上限30%。") as prime_context, \
              patch("main._run_market_review_with_shared_lock") as run_with_lock, \
@@ -590,6 +598,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
                     region="cn",
                     no_market_review=False,
                     allow_generate=True,
+                    target_date=target_date,
                 ),
                 unittest.mock.call(
                     config,
@@ -597,9 +606,13 @@ class MainScheduleModeTestCase(unittest.TestCase):
                     region="cn",
                     no_market_review=False,
                     allow_generate=False,
+                    target_date=target_date,
                 ),
             ]
         )
+        self.assertEqual(len(reference_times), 1)
+        self.assertIs(pipeline.run.call_args.kwargs["current_time"], reference_times[0])
+        self.assertEqual(pipeline.run.call_args.kwargs["current_time"].tzinfo, timezone.utc)
         run_with_lock.assert_not_called()
         run_market_review.assert_not_called()
         refresh.assert_called_once_with(config)
@@ -607,6 +620,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
 
     def test_run_full_analysis_does_not_reuse_single_context_for_multi_market_review(self) -> None:
         args = self._make_args()
+        target_date = date(2026, 3, 26)
         config = self._make_config(
             trading_day_check_enabled=True,
             market_review_region="both",
@@ -626,6 +640,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
 
         with patch.object(main, "_refresh_stock_index_cache_for_analysis") as refresh, \
              patch("main._compute_trading_day_filter", return_value=([], "cn,us", False)), \
+             patch("main._resolve_daily_market_context_target_date", return_value=target_date), \
              patch("src.core.pipeline.StockAnalysisPipeline", side_effect=build_pipeline), \
              patch("main._prime_daily_market_context", return_value="A股缓存摘要") as prime_context, \
              patch("main._run_market_review_with_shared_lock", return_value="多市场复盘") as run_with_lock, \
@@ -639,6 +654,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
             region="cn,us",
             no_market_review=False,
             allow_generate=True,
+            target_date=target_date,
         )
         run_with_lock.assert_called_once()
         self.assertEqual(run_with_lock.call_args.kwargs["override_region"], "cn,us")
@@ -647,6 +663,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
         pipeline.run.assert_called_once()
 
     def test_prime_daily_market_context_readonly_mode_still_reuses_cached_context(self) -> None:
+        target_date = date(2026, 3, 26)
         config = self._make_config(
             trading_day_check_enabled=False,
             market_review_enabled=True,
@@ -673,6 +690,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
                 region="cn",
                 no_market_review=False,
                 allow_generate=False,
+                target_date=target_date,
             )
 
         self.assertEqual(summary, "历史复盘摘要")
@@ -682,6 +700,7 @@ class MainScheduleModeTestCase(unittest.TestCase):
         self.assertFalse(call_kwargs["force_refresh"])
         self.assertFalse(call_kwargs["allow_generate"])
         self.assertFalse(call_kwargs["persist_market_review_history"])
+        self.assertEqual(call_kwargs["target_date"], target_date)
 
     def test_run_full_analysis_runs_full_market_review_when_preheat_is_runtime_only(self) -> None:
         args = self._make_args()
