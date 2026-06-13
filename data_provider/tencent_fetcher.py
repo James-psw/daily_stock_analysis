@@ -147,9 +147,16 @@ def _is_capped_history_incomplete(
 
 def _format_tencent_date(date_text: str) -> Optional[str]:
     try:
-        return datetime.strptime(date_text, "%Y-%m-%d").strftime("%Y%m%d")
+        return datetime.strptime(date_text, "%Y-%m-%d").strftime("%Y-%m-%d")
     except ValueError:
         return None
+
+
+def _lots_to_shares(volume: Any) -> Any:
+    try:
+        return float(volume) * 100
+    except (TypeError, ValueError):
+        return volume
 
 
 def _extract_kline_rows(payload: dict[str, Any], *, symbol: str) -> list[dict[str, Any]]:
@@ -170,7 +177,7 @@ def _extract_kline_rows(payload: dict[str, Any], *, symbol: str) -> list[dict[st
                 "close": row[2],
                 "high": row[3],
                 "low": row[4],
-                "volume": row[5],
+                "volume": _lots_to_shares(row[5]),
                 "amount": amount,
             }
         )

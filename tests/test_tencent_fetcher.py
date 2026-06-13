@@ -47,7 +47,7 @@ def test_tencent_fetcher_parses_qfq_daily_response() -> None:
         df = fetcher.get_daily_data("000001", start_date="2026-05-01", end_date="2026-05-10")
 
     assert captured["url"] == "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
-    assert captured["params"]["param"].startswith("sz000001,day,20260501,20260510,")
+    assert captured["params"]["param"].startswith("sz000001,day,2026-05-01,2026-05-10,")
     assert captured["params"]["param"].endswith(",qfq")
     assert list(df.columns) == [
         "date",
@@ -65,6 +65,7 @@ def test_tencent_fetcher_parses_qfq_daily_response() -> None:
     ]
     assert len(df) == 2
     assert float(df.iloc[0]["close"]) == 10.5
+    assert float(df.iloc[0]["volume"]) == 1234500.0
     assert float(df.iloc[1]["amount"]) == 77890.0
 
 
@@ -98,10 +99,11 @@ def test_tencent_fetcher_requests_explicit_historical_date_window() -> None:
         df = fetcher.get_daily_data("000001", start_date="2020-05-01", end_date="2020-05-31")
 
     assert captured["url"] == "https://web.ifzq.gtimg.cn/appstock/app/fqkline/get"
-    assert ",day,20200501,20200531," in captured["params"]["param"]
+    assert ",day,2020-05-01,2020-05-31," in captured["params"]["param"]
     assert captured["params"]["param"].endswith(",qfq")
     assert len(df) == 1
     assert float(df.iloc[0]["close"]) == 8.2
+    assert float(df.iloc[0]["volume"]) == 500000.0
 
 
 def test_tencent_fetcher_preserves_amount_column_when_missing() -> None:
@@ -127,6 +129,7 @@ def test_tencent_fetcher_preserves_amount_column_when_missing() -> None:
 
     assert "amount" in df.columns
     assert pd.isna(df.iloc[0]["amount"])
+    assert float(df.iloc[0]["volume"]) == 100000.0
 
 
 def test_tencent_fetcher_returns_empty_frame_for_empty_history() -> None:
@@ -173,7 +176,7 @@ def test_tencent_fetcher_keeps_short_history_when_cap_not_hit() -> None:
     with patch("data_provider.tencent_fetcher.requests.get", fake_get):
         df = TencentFetcher().get_daily_data("000001", start_date="2020-01-01", end_date="2026-05-10")
 
-    assert ",day,20200101,20260510,800,qfq" in captured["params"]["param"]
+    assert ",day,2020-01-01,2026-05-10,800,qfq" in captured["params"]["param"]
     assert len(df) == 2
     assert float(df.iloc[0]["close"]) == 10.5
 
@@ -209,7 +212,7 @@ def test_tencent_fetcher_keeps_near_cap_short_history_for_new_listing() -> None:
     with patch("data_provider.tencent_fetcher.requests.get", fake_get):
         df = TencentFetcher().get_daily_data("000001", start_date="2020-01-01", end_date="2026-05-10")
 
-    assert ",day,20200101,20260510,800,qfq" in captured["params"]["param"]
+    assert ",day,2020-01-01,2026-05-10,800,qfq" in captured["params"]["param"]
     assert len(df) == 799
     assert float(df.iloc[0]["close"]) == 10.5
 
@@ -245,5 +248,5 @@ def test_tencent_fetcher_rejects_capped_incomplete_history() -> None:
     with patch("data_provider.tencent_fetcher.requests.get", fake_get):
         df = TencentFetcher().get_daily_data("000001", start_date="2020-01-01", end_date="2026-05-10")
 
-    assert ",day,20200101,20260510,800,qfq" in captured["params"]["param"]
+    assert ",day,2020-01-01,2026-05-10,800,qfq" in captured["params"]["param"]
     assert df.empty
