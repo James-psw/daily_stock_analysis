@@ -562,6 +562,86 @@ describe('stockPoolStore', () => {
     expect(state.currentPage).toBe(1);
   });
 
+  it('selects the newest report for the completed task stock during silent refresh', async () => {
+    const latestItem = {
+      ...historyItem,
+      id: 2,
+      queryId: 'q-2',
+      createdAt: '2026-03-18T09:00:00Z',
+    };
+    const latestReport = {
+      ...historyReport,
+      meta: {
+        ...historyReport.meta,
+        id: 2,
+        queryId: 'q-2',
+        createdAt: '2026-03-18T09:00:00Z',
+      },
+    };
+
+    useStockPoolStore.setState({
+      historyItems: [historyItem],
+      selectedReport: historyReport,
+    });
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 2,
+      page: 1,
+      limit: 20,
+      items: [latestItem, historyItem],
+    });
+    vi.mocked(historyApi.getDetail).mockResolvedValue(latestReport);
+
+    await useStockPoolStore.getState().refreshHistoryForCompletedTask(createTask({
+      status: 'completed',
+      progress: 100,
+    }));
+
+    const state = useStockPoolStore.getState();
+    expect(historyApi.getDetail).toHaveBeenCalledWith(2);
+    expect(state.historyItems.map((item) => item.id)).toEqual([2, 1]);
+    expect(state.selectedReport?.meta.id).toBe(2);
+  });
+
+  it('does not replace the selected report when another stock task completes', async () => {
+    const otherReport = {
+      ...historyReport,
+      meta: {
+        ...historyReport.meta,
+        id: 3,
+        queryId: 'q-3',
+        stockCode: 'AAPL',
+        stockName: 'Apple',
+      },
+    };
+    const latestItem = {
+      ...historyItem,
+      id: 2,
+      queryId: 'q-2',
+      createdAt: '2026-03-18T09:00:00Z',
+    };
+
+    useStockPoolStore.setState({
+      historyItems: [historyItem],
+      selectedReport: otherReport,
+    });
+    vi.mocked(historyApi.getList).mockResolvedValue({
+      total: 2,
+      page: 1,
+      limit: 20,
+      items: [latestItem, historyItem],
+    });
+
+    await useStockPoolStore.getState().refreshHistoryForCompletedTask(createTask({
+      status: 'completed',
+      progress: 100,
+    }));
+
+    const state = useStockPoolStore.getState();
+    expect(historyApi.getDetail).not.toHaveBeenCalled();
+    expect(state.historyItems.map((item) => item.id)).toEqual([2, 1]);
+    expect(state.selectedReport?.meta.stockCode).toBe('AAPL');
+  });
+
   it('ignores late history responses after dashboard reset', async () => {
     const deferred = createDeferred<{
       total: number;

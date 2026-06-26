@@ -18,6 +18,7 @@ type FetchHistoryOptions = {
   autoSelectFirst?: boolean;
   reset?: boolean;
   silent?: boolean;
+  selectLatestForStockCode?: string;
 };
 
 type SubmitAnalysisOptions = {
@@ -88,6 +89,7 @@ export interface StockPoolState {
   loadMoreStockHistory: () => Promise<void>;
   loadInitialHistory: () => Promise<void>;
   refreshHistory: (silent?: boolean) => Promise<void>;
+  refreshHistoryForCompletedTask: (task: TaskInfo) => Promise<void>;
   loadMoreHistory: () => Promise<void>;
   loadMarketReviewHistory: () => Promise<void>;
   refreshMarketReviewHistory: (silent?: boolean) => Promise<void>;
@@ -238,6 +240,10 @@ function normalizeSelectedReport(report: AnalysisReport): AnalysisReport {
   };
 }
 
+function normalizeStockCodeKey(stockCode: string | undefined): string {
+  return (stockCode ?? '').trim().toUpperCase();
+}
+
 function isDateInHistoryRange(createdAt: string | undefined, range: StockHistoryRange): boolean {
   if (range === 'all') {
     return true;
@@ -353,7 +359,12 @@ async function fetchHistory(
   set: (partial: Partial<StockPoolState>) => void,
   options: FetchHistoryOptions = {},
 ): Promise<HistoryListResponse | null> {
-  const { autoSelectFirst = false, reset = true, silent = false } = options;
+  const {
+    autoSelectFirst = false,
+    reset = true,
+    silent = false,
+    selectLatestForStockCode,
+  } = options;
   const currentState = get();
   const page = reset ? 1 : currentState.currentPage + 1;
   const requestId = ++historyRequestSeq;
@@ -402,6 +413,25 @@ async function fetchHistory(
 
     if (autoSelectFirst && response.items.length > 0 && !get().selectedReport) {
       await get().selectHistoryItem(response.items[0].id);
+    } else if (reset) {
+      const targetStockCode = normalizeStockCodeKey(selectLatestForStockCode);
+      const selectedReport = get().selectedReport;
+      const selectedStockCode = normalizeStockCodeKey(selectedReport?.meta.stockCode);
+      const shouldSelectLatest =
+        targetStockCode.length > 0 &&
+        (!selectedReport ||
+          (selectedReport.meta.reportType !== 'market_review' && selectedStockCode === targetStockCode));
+      const latestItem = shouldSelectLatest
+        ? response.items.find(
+            (item) =>
+              item.reportType !== 'market_review' &&
+              normalizeStockCodeKey(item.stockCode) === targetStockCode,
+          )
+        : undefined;
+
+      if (latestItem && latestItem.id !== selectedReport?.meta.id) {
+        await get().selectHistoryItem(latestItem.id);
+      }
     }
 
     return response;
@@ -552,6 +582,14 @@ export const useStockPoolStore = create<StockPoolState>((set, get) => ({
 
   refreshHistory: async (silent = false) => {
     await fetchHistory(get, set, { reset: true, silent });
+  },
+
+  refreshHistoryForCompletedTask: async (task) => {
+    await fetchHistory(get, set, {
+      reset: true,
+      silent: true,
+      selectLatestForStockCode: task.reportType === 'market_review' ? undefined : task.stockCode,
+    });
   },
 
   loadMoreHistory: async () => {
