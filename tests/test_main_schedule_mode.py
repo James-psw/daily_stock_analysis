@@ -128,6 +128,40 @@ class MainScheduleModeTestCase(unittest.TestCase):
         defaults.update(overrides)
         return _DummyConfig(**defaults)
 
+    def test_daily_market_context_target_date_routes_jp_kr_calendars(self) -> None:
+        current_time = datetime(2026, 5, 7, 0, 30, tzinfo=timezone.utc)
+        calls = []
+
+        def resolve_effective_date(market, *, current_time=None):
+            calls.append((market, current_time))
+            return date(2026, 5, 7)
+
+        with patch(
+            "src.core.trading_calendar.get_effective_trading_date",
+            side_effect=resolve_effective_date,
+        ):
+            self.assertEqual(
+                main._resolve_daily_market_context_target_date("jp", current_time),
+                date(2026, 5, 7),
+            )
+            self.assertEqual(
+                main._resolve_daily_market_context_target_date("kr", current_time),
+                date(2026, 5, 7),
+            )
+            self.assertEqual(
+                main._resolve_daily_market_context_target_date("jp,kr", current_time),
+                date(2026, 5, 7),
+            )
+
+        self.assertEqual(
+            calls,
+            [
+                ("jp", current_time),
+                ("kr", current_time),
+                ("jp", current_time),
+            ],
+        )
+
     def test_public_webui_bind_warns_when_auth_is_disabled(self) -> None:
         with patch("src.auth.is_auth_enabled", return_value=False), \
              patch("main.logger.warning") as warning_log:
