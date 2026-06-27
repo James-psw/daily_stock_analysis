@@ -41,10 +41,19 @@
 
 支持范围：
 
-- `jp`：通过 Yahoo Finance 获取日经225 `^N225` 与东证指数 `^TOPX`，输出日股大盘复盘。
-- `kr`：通过 Yahoo Finance 获取 KOSPI `^KS11` 与 KOSDAQ `^KQ11`，输出韩股大盘复盘。
+- `jp`：通过 Yahoo Finance 获取日经225 `^N225` 与东证指数 `^TOPX`，输出日股大盘复盘。可复核页面：
+  - `^N225`：<https://finance.yahoo.com/quote/%5EN225/>
+  - `^TOPX`：<https://finance.yahoo.com/quote/%5ETOPX/>
+- `kr`：通过 Yahoo Finance 获取 KOSPI `^KS11` 与 KOSDAQ `^KQ11`，输出韩股大盘复盘。可复核页面：
+  - `^KS11`：<https://finance.yahoo.com/quote/%5EKS11/>
+  - `^KQ11`：<https://finance.yahoo.com/quote/%5EKQ11/>
 - Web 设置页可选择 `jp` / `kr`；交易日检查会按 `XTKS / Asia/Tokyo` 与 `XKRX / Asia/Seoul` 过滤 `both` 中当日开市市场。
 - 复盘策略、新闻搜索词、Prompt 市场语义和中英文通知标题均按 JP/KR 独立 profile 处理。
+
+说明（兼容性与验收口径）：
+
+- 线上数据可用性来自 Yahoo Finance 指数页面与接口契约，当前实现仅覆盖 `data_provider/yfinance_fetcher.py` 的指数路由与降级行为；不对实时行情连通性作稳定性承诺。
+- 与该条目标相关的本地自动化验证默认使用离线回归：`tests/test_yfinance_jp_kr_indices.py`、`tests/test_yfinance_hk_indices.py`（共性映射/回退）与 `tests/test_trading_calendar.py`（交易日过滤）。如果要补充实时可用性复核，可在联网环境直接访问上述 Yahoo Finance 页面进行一次性抽检。
 
 边界：
 
