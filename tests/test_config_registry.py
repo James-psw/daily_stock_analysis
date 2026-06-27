@@ -782,13 +782,16 @@ class TestMarketReviewFieldsRegistered(unittest.TestCase):
         field = get_field_definition("MARKET_REVIEW_REGION")
         self.assertEqual(field["category"], "system")
         self.assertEqual(field["data_type"], "string")
-        self.assertEqual(field["ui_control"], "select")
+        self.assertEqual(field["ui_control"], "text")
         self.assertEqual(field["default_value"], "cn")
         self.assertEqual(
-            field["validation"]["enum"],
+            field["validation"]["allowed_values"],
             ["cn", "hk", "us", "jp", "kr", "both"],
         )
-        self.assertEqual(field["options"], ["cn", "hk", "us", "jp", "kr", "both"])
+        self.assertEqual(
+            field["validation"]["delimiter"],
+            ",",
+        )
         self.assertFalse(field["is_sensitive"])
 
     def test_daily_market_context_field_definition_exists(self):

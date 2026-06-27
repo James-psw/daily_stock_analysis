@@ -543,7 +543,7 @@ def compute_effective_region(
     Compute effective market review region given config and open markets.
 
     Args:
-        config_region: From MARKET_REVIEW_REGION ('cn' | 'hk' | 'us' | 'jp' | 'kr' | 'both')
+        config_region: From MARKET_REVIEW_REGION ('cn' | 'hk' | 'us' | 'jp' | 'kr' | 'both' or comma subset)
         open_markets: Markets open today
 
     Returns:
@@ -552,14 +552,35 @@ def compute_effective_region(
         'cn' | 'hk' | 'us' | 'jp' | 'kr' | 'both': effective subset for today
     """
     markets = ("cn", "hk", "us", "jp", "kr")
-    if config_region not in (*markets, "both"):
-        config_region = "cn"
-    if config_region in markets:
-        return config_region if config_region in open_markets else ""
-    # both: return only the markets that are actually open today
-    parts = [m for m in markets if m in open_markets]
-    if not parts:
+    normalized = (config_region or "cn").strip().lower()
+    if not normalized:
+        normalized = "cn"
+
+    requested = {
+        item.strip() for item in normalized.split(",") if item.strip()
+    }
+    if not requested:
+        requested = {"cn"}
+
+    if "both" in requested:
+        requested = set(markets)
+    else:
+        # Ignore invalid tokens and only keep known markets.
+        requested = {item for item in requested if item in markets}
+
+    if not requested:
+        # No valid market token left after filtering; follow parser fallback behavior.
+        requested = {"cn"}
+
+    # single explicit region: keep single-region return semantics (empty when closed)
+    if len(requested) == 1:
+        region = next(iter(requested))
+        return region if region in open_markets else ""
+
+    # multi-region subset: keep only markets open today, in canonical order
+    open_selected = [m for m in markets if m in requested and m in open_markets]
+    if not open_selected:
         return ""
-    if len(parts) == 1:
-        return parts[0]
-    return ",".join(parts)
+    if len(open_selected) == 1:
+        return open_selected[0]
+    return ",".join(open_selected)

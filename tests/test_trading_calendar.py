@@ -746,6 +746,18 @@ class ComputeEffectiveRegionTestCase(unittest.TestCase):
         result = trading_calendar.compute_effective_region("both", {"cn", "hk"})
         self.assertEqual(result, "cn,hk")
 
+    def test_comma_subset_open_returns_commas_ordered_subset(self):
+        result = trading_calendar.compute_effective_region("cn,jp,us", {"cn", "us"})
+        self.assertEqual(result, "cn,us")
+
+    def test_comma_subset_with_invalid_tokens_filters_invalid_and_orders_by_market_list(self):
+        result = trading_calendar.compute_effective_region("us,eu,cn,xx,jp", {"us", "cn"})
+        self.assertEqual(result, "cn,us")
+
+    def test_comma_subset_no_supported_tokens_falls_back_to_cn(self):
+        result = trading_calendar.compute_effective_region("eu,xx", {"cn", "hk"})
+        self.assertEqual(result, "cn")
+
     def test_both_single_market_open_returns_single(self):
         result = trading_calendar.compute_effective_region("both", {"us"})
         self.assertEqual(result, "us")
