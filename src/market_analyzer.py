@@ -30,7 +30,7 @@ from src.llm.backend_registry import (
     resolve_generation_fallback_backend_id,
 )
 from src.llm.generation_backend import GenerationError
-from src.schemas.market_light import MarketLightSnapshot
+from src.schemas.market_light import MARKET_LIGHT_REGIONS, MarketLightSnapshot
 from src.services.run_diagnostics import record_llm_run, record_llm_run_started
 from src.services.intelligence_service import IntelligenceService
 from data_provider.base import DataFetcherManager
@@ -111,7 +111,7 @@ class MarketLightReviewResult:
 
     overview: MarketOverview
     report: str
-    market_light_snapshot: Dict[str, Any]
+    market_light_snapshot: Optional[Dict[str, Any]]
     structured_payload: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -692,7 +692,11 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
         language = self._get_review_language()
         sections = self._split_report_sections(report)
         title = self._extract_report_title(report) or self._get_review_title(overview.date).lstrip("# ").strip()
-        light = market_light_snapshot or self.build_market_light_snapshot(overview)
+        light = (
+            market_light_snapshot or self.build_market_light_snapshot(overview)
+            if self._supports_market_light()
+            else None
+        )
         breadth_dimensions = None
         if isinstance(light, dict):
             dimensions = light.get("dimensions")
@@ -721,7 +725,6 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             "generated_at": datetime.now().isoformat(),
             "date": overview.date,
             "market_scope": self._get_market_scope_name(language),
-            "market_light": light,
             "indices": [idx.to_dict() for idx in overview.indices],
             "sectors": {
                 "top": list(overview.top_sectors or []),
@@ -736,6 +739,9 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             "markdown_report": report,
         }
 
+        if light is not None:
+            payload["market_light"] = light
+
         if has_breadth_data:
             payload["breadth"] = {
                 "up_count": overview.up_count,
@@ -748,6 +754,9 @@ Focus on index trend, liquidity, and sector rotation to shape the next-session t
             }
 
         return payload
+
+    def _supports_market_light(self) -> bool:
+        return self.region in MARKET_LIGHT_REGIONS
 
     @staticmethod
     def _extract_report_title(report: str) -> str:
@@ -1568,7 +1577,7 @@ Market conditions can change quickly. The data above is for reference only and d
 
         # 3. 生成复盘报告
         report = self.generate_market_review(overview, news)
-        snapshot = self.build_market_light_snapshot(overview)
+        snapshot = self.build_market_light_snapshot(overview) if self._supports_market_light() else None
         structured_payload = self.build_market_review_payload(
             overview,
             news,

@@ -11,13 +11,12 @@ from sqlalchemy import desc
 
 from src.core.market_review import MARKET_REVIEW_HISTORY_CODE, MARKET_REVIEW_REPORT_TYPE
 from src.market_analyzer import MarketAnalyzer
-from src.schemas.market_light import MarketLightSnapshot
+from src.schemas.market_light import MARKET_LIGHT_REGIONS, MarketLightSnapshot
 from src.storage import AnalysisHistory, DatabaseManager
 
 
 logger = logging.getLogger(__name__)
 
-MARKET_LIGHT_REGIONS = frozenset({"cn", "hk", "us"})
 MARKET_LIGHT_HISTORY_BATCH_SIZE = 100
 
 
