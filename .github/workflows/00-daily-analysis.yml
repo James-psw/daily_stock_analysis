@@ -1,5 +1,9 @@
 name: 每日股票分析
 
+permissions:
+  contents: write
+  actions: read
+
 on:
   # 定时触发 - 每天北京时间 18:00 (UTC 10:00)
   schedule:
@@ -530,4 +534,22 @@ jobs:
           if [ -f "logs/stock_analysis_$(date +%Y%m%d).log" ]; then
             echo "📜 最近日志（最后 30 行）:"
             tail -30 logs/stock_analysis_*.log 2>/dev/null || echo "无日志"
+          fi
+      
+      - name: 提交报告到仓库（供Hermes转发到微信）
+        if: always()
+        run: |
+          if [ -d "reports" ] && [ "$(ls -A reports 2>/dev/null)" ]; then
+            git config user.name "stock-analysis-bot"
+            git config user.email "bot@github.com"
+            git add reports/
+            if ! git diff --quiet --cached; then
+              git commit -m "每日股票分析报告 $(TZ='Asia/Shanghai' date '+%Y-%m-%d')"
+              git push
+              echo "✅ 报告已提交到仓库"
+            else
+              echo "ℹ️ 报告无变化，跳过提交"
+            fi
+          else
+            echo "⚠️ 无报告文件可提交"
           fi
