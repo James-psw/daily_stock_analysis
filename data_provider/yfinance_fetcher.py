@@ -142,6 +142,13 @@ class YfinanceFetcher(BaseFetcher):
             logger.debug(f"转换港股代码: {stock_code} -> {hk_code}.HK")
             return f"{hk_code}.HK"
 
+        # 港股：5位纯数字代码 -> .HK后缀（兜底，避免被误认为A股）
+        if len(code) == 5 and code.isdigit():
+            hk_code = code.lstrip('0') or '0'
+            hk_code = hk_code.zfill(4)
+            logger.debug(f"识别为5位港股代码: {stock_code} -> {hk_code}.HK")
+            return f"{hk_code}.HK"
+
         # 已经包含后缀的情况
         if '.SS' in code or '.SZ' in code or '.HK' in code or '.BJ' in code:
             return code
@@ -941,3 +948,4 @@ if __name__ == "__main__":
         print(df.tail())
     except Exception as e:
         print(f"获取失败: {e}")
+
