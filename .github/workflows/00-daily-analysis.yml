@@ -542,7 +542,7 @@ jobs:
           if [ -d "reports" ] && [ "$(ls -A reports 2>/dev/null)" ]; then
             git config user.name "stock-analysis-bot"
             git config user.email "bot@github.com"
-            git add reports/
+            git add -f reports/
             if ! git diff --quiet --cached; then
               git commit -m "每日股票分析报告 $(TZ='Asia/Shanghai' date '+%Y-%m-%d')"
               git push
