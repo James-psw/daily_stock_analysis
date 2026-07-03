@@ -104,6 +104,7 @@ STOCK_NAME_MAP = {
     "01299": "友邦保险",
     "00941": "中国移动",
     "00883": "中国海洋石油",
+    "00175": "吉利汽车",
 }
 
 
@@ -137,3 +138,4 @@ def is_meaningful_stock_name(name: str | None, stock_code: str) -> bool:
         return False
 
     return True
+
